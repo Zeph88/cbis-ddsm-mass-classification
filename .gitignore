@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+
+# Data
+datasets/
+data/raw/
+data/interim/
+data/external/
+*.dcm
+*.png
+*.jpg
+*.jpeg
+*.npy
+*.npz
+
+# Models
+models/
+*.pt
+*.pth
+*.ckpt
+*.h5
+
+# Logs / outputs
+runs/
+outputs/
+logs/
+wandb/
+mlruns/
