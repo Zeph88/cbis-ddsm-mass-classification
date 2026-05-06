@@ -2,7 +2,7 @@ import sys
 from pathlib import Path 
 import pandas as pd 
 import numpy as np 
-from functions import fetch_image, check_path
+from src.functions import fetch_image, check_path
 
 PROJECT_ROOT = Path("/home/julien/cbis-ddsm")
 sys.path.insert(0, str(PROJECT_ROOT))

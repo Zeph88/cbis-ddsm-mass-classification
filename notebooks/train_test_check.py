@@ -1,8 +1,13 @@
-from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT
+import sys
 from pathlib import Path 
 import pandas as pd 
 import numpy as np 
-from functions import fetch_image
+
+PROJECT_ROOT = Path("/home/julien/cbis-ddsm")
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT
+from src.functions import fetch_image
 
 df_train, df_test, images_root = fetch_image(TRAIN_CSV, TEST_CSV, IMAGES_ROOT)
 
