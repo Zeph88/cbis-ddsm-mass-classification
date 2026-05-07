@@ -1,7 +1,10 @@
+import os
 from pathlib import Path
 import pandas as pd
 import numpy as np
 import pydicom
+from pydicom.data import get_testdata_files
+from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT
 
 def fetch_image(path_csv_train, path_csv_test, image_root):
     csv_path_train = Path(path_csv_train)
@@ -19,10 +22,40 @@ def check_path(val, images_root):
     rel_path = list(Path(str(val).strip()).parts)
     rel_path = "/".join(rel_path[:-1])
     path_folder = Path(images_root / rel_path)
+    relative_path = Path(rel_path)
 
     if path_folder.exists():
         real_folder = True
     else:
         real_folder = False
 
-    return real_folder, path_folder
+    return real_folder, relative_path
+
+def find_dicom_by_series_description(csv_path_value, images_root, expected_description):
+    """
+    Resolve one CBIS-DDSM CSV path to the actual DICOM file whose
+    SeriesDescription matches expected_description.
+
+    Returns a relative path to images_root, or None.
+    """
+    isfolder, rel_folder = check_path(csv_path_value, images_root)
+
+    if not isfolder:
+        return None
+
+    abs_folder = images_root / rel_folder
+
+    for dcm_abs_path in abs_folder.rglob("*.dcm"):
+        try:
+            ds = pydicom.dcmread(dcm_abs_path, stop_before_pixels=True)
+            series_description = str(
+                getattr(ds, "SeriesDescription", "")
+            ).strip()
+
+            if series_description == expected_description:
+                return str(dcm_abs_path.relative_to(images_root))
+
+        except Exception:
+            continue
+
+    return None
