@@ -3,6 +3,25 @@ import pydicom
 import tensorflow as tf
 
 
+def apply_roi_soft_mask(image, mask, background_factor=0.3):
+    mask = tf.cast(mask > 0, tf.float32)
+    return image * mask + image * (1 - mask) * background_factor
+
+def apply_roi_emphasis(image, mask, alpha=1.5):
+    mask = tf.cast(mask > 0, tf.float32)
+    emphasized = image * (1 + alpha * mask)
+    emphasized = emphasized / tf.reduce_max(emphasized)
+
+    return emphasized
+
+def apply_roi_mask(image, mask):
+    mask = tf.cast(mask > 0, tf.float32)
+
+    if len(mask.shape) == 2:
+        mask = tf.expand_dims(mask, axis=-1)
+
+    return image * mask
+
 def read_dicom_as_array(dicom_path):
     ds = pydicom.dcmread(dicom_path)
     img = ds.pixel_array.astype(np.float32)

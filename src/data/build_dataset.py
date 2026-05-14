@@ -3,8 +3,10 @@ import pathlib
 from pathlib import Path
 import pandas as pd 
 import numpy as np 
-from src.functions import fetch_image, find_dicom_by_series_description
-from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT, DATASET_INDEX
+from src.functions import fetch_image, find_dicom_by_series_description, set_seed
+from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT, DATASET_INDEX, SEED
+
+set_seed(SEED)
 
 _MAPPING_PATHOLOGY = {
     'BENIGN' : 0,

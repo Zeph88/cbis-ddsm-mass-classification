@@ -40,4 +40,6 @@ runs/
 outputs/
 logs/
 wandb/
-mlruns/
+mlruns/*.keras
+*.npy
+data/preprocessed/

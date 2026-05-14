@@ -5,6 +5,21 @@ import numpy as np
 import pydicom
 from pydicom.data import get_testdata_files
 from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT
+import random
+import tensorflow as tf
+
+def set_seed(seed=42):
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+    tf.keras.utils.set_random_seed(seed)
+
+    try:
+        tf.config.experimental.enable_op_determinism()
+    except Exception:
+        pass
 
 def fetch_image(path_csv_train, path_csv_test, image_root):
     csv_path_train = Path(path_csv_train)
