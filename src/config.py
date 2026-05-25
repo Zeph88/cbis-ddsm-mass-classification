@@ -1,9 +1,13 @@
 from pathlib import Path
 
-SEED = 42
+SEED = 123
+BATCH_SIZE = 16
+EPOCHS = 50
 
 PROJECT_ROOT = Path("/home/julien/cbis-ddsm")
 DATA_ROOT = PROJECT_ROOT / "data"
+SRC_ROOT = PROJECT_ROOT / "src"
+MODEL_ROOT = SRC_ROOT / "models"
 METADATA_DIR = DATA_ROOT / "metadata"
 PROCESSED_DIR = DATA_ROOT / "processed"
 OUTPUT_NPY = DATA_ROOT / "preprocessed"

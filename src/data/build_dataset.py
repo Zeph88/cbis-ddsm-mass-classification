@@ -32,11 +32,12 @@ def add_labels(df):
 def add_lesion_key(df):
     df = df.copy()
     df["lesion_key"] = (
+        df["source"].astype(str) + "_" +
         df["patient_id"].astype(str) + "_" +
         df["left or right breast"].astype(str) + "_" +
+        df["image view"].astype(str) + "_" +
         df["abnormality id"].astype(str)
     )
-
     return df
 
 def build_dataset_index():
@@ -49,6 +50,14 @@ def build_dataset_index():
             p,
             IMAGES_ROOT,
             "ROI mask images"
+        )
+    )
+
+    df["resolved_image_file_path"] = df["image file path"].apply(
+        lambda p: find_dicom_by_series_description(
+            p,
+            IMAGES_ROOT,
+            "full mammogram images"
         )
     )
 

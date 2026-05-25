@@ -2,18 +2,14 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from src.preprocessing.dicom_io import dicom_to_tf_tensor, apply_roi_mask
-from src.config import DATASET_INDEX, IMAGES_ROOT
+from src.config import DATASET_INDEX, IMAGES_ROOT, BATCH_SIZE
 import math
 
-def build_tf_dataset(index_csv, source="train", batch_size=16, shuffle=True, seed=42):
-    df = pd.read_csv(index_csv)
+def build_tf_dataset(df, batch_size=16, shuffle=True, seed=42):
 
-    df = df[
-        (df["keep"] == True) &
-        (df["source"] == source)
-    ].reset_index(drop=True)
+    df = df[(df["keep"] == True)].reset_index(drop=True)
 
-    paths = df["preprocessed_roi_path"].tolist()
+    paths = df["preprocessed_image_path"].tolist()
     labels = df["label"].astype("int32").tolist()
 
     def load_npy(path, label):
@@ -40,7 +36,7 @@ def build_tf_dataset(index_csv, source="train", batch_size=16, shuffle=True, see
     dataset = dataset.map(tf_load_npy, num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.batch(batch_size).prefetch(1)
 
-    print(source, len(df), "steps:", math.ceil(len(df) / batch_size))
+    print(len(df), "steps:", math.ceil(len(df) / batch_size))
 
     return dataset
 
@@ -49,7 +45,7 @@ def main():
         DATASET_INDEX,
         IMAGES_ROOT,
         source="train",
-        batch_size=16,
+        batch_size=BATCH_SIZE,
         shuffle=True
     )
 
