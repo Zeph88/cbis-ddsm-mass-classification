@@ -228,6 +228,7 @@ Be careful when choosing metrics
 Incorrectly chosen baseline
 	- Take a relevant one to measure whether the model improves sth
 
+
 • Abdikenov, B.; Zhaksylyk, T.; Imasheva, A.; Orazayev, Y.; Karibekov, T. Innovative Multi-View Strategies for AI-Assisted Breast Cancer Detection in Mammography. J. Imaging 2025, 11, 247. https://doi.org/10.3390/jimaging11080247 
 	- Merged images CC + MLO > Method = crop black margin until one non-black pixel is spotted. Then, take 5 pixel-margin from there
 	- Or, train one CNN on MLO only, one on CC only > features are averaged and passed to additional layers
@@ -240,3 +241,65 @@ Incorrectly chosen baseline
 https://search.libraries.london.ac.uk/permalink/44SHL_INST/1i2p75j/cdi_doaj_primary_oai_doaj_org_article_27bf4ed8121a415fb1bc5802515273fb
 
 • Shen et al. — “An interpretable classifier for high-resolution breast cancer screening images utilizing weakly supervised localization” — Medical Image Analysis, 2021
+
+globally-aware multiple instance classifier > GMIC
+"Moreover, as suggested in multiple clinical studies (Van Gils et al., 1998; Pereira et al., 2009; Wei et al., 2011), both the local details, such as lesion shape, and global structure, such as overall breast fibroglandular tissue density and pattern, are essential for accurate diagnosis."
+dataset : + 1M images
+Combine information from global and local features
+predict bening / malignant with AUC 0.93 (0.858 on the CBIS-DDSM)
+Outperforms ResNet-34 
+
+Method: multi-label problem. Is there any benign / malignant lesion?
+The model automatically spots ROI. Not in scope here
+On the CBIS-DDSM > 85% training (20% of it for validation) + 15% for testing (Comparison to Zhu et al. 2017 and Shu et al. 2020). Splitting provided by Lee et al. 2017
+Images are resized to 2944 x 1920 + pixels normalized from 0 to 1
+Prediction is the average of prediction for CC and MLO view. One model for both though > "our model generates a prediction for each image, we define breast-level predictions as the average of the two image-level predictions."
+
+
+Lee, R., Gimenez, F., Hoogi, A., Miyake, K. K., Gorovoy, M. & Rubin, D. L. "A curated mammography data set for use in computer-aided detection and diagnosis research."
+CADe vs CADx
+"The DDSM is a collection of mammograms from the following sources: Massachusetts General Hospital, Wake Forest University School of Medicine, Sacred Heart Hospital, and Washington University of St Louis School of Medicine"
+A curated version of the DDSM. 339 images were excluded because there were no clear evidence of a lesion + images were removed due to personal information leakage.
+DICOM files (Digital Imaging and Communications in Medicine)
+raniocaudal (CC) and/or mediolateral oblique (MLO) view
+train and test sets are split in a way that reproduces data complexity:
+	> BI-RADS : Except for the lowest level that is twice as much more prevalent in the test set than in the training set, all other bins are even
+	> Mass cases : Malignant cases account for about 10-point more in the training set than in the test set.
+
+								Benign Cases 						Malignant Cases
+	Mass Training Set 	355 cases (387 abnormalities) 		336 cases (361 abnormalities)
+	Mass Test Set 		117 cases (135 abnormalities) 		83 cases (87 abnormalities)
+
+
+Wang L. Mammography with deep learning for breast cancer detection. Front Oncol. 2024 Feb 12;14:1281922. doi: 10.3389
+Mammography
+	> Advantages
+		- Low dose Xray + high resolution image
+		- Enhanced by Digital breast tomosynthesis (DBT) - a 3D mammography technique
+
+	> Disadvantages
+		- 2D representation of breast > Not state of the art anymore
+		- High false positive rate is a challenge
+		- Limited sensitivity for women with dense breast tissue
+		- Radiation exposure accumulates over time
+		- CADx is difficult
+		- inaccuracy in detecting small cancers
+
+CNN models have a lower false positive rate than radiologists (Shen et al. even managed a higher accuracy 0.88 vs 0.83)
+Steps :
+	> Data Collection
+	> Data Preprocessing : denoising + min-max usually used
+	> Model Building
+	> Model Evaluation : Accuracy, Sensitivity, Precision, F1-score, MSE, MAE, AUC 
+	> Model Interpretation - Helps identify which feature of the image is used to make predictions
+	> Deployment
+CNN proves particularly effective to identify specific patterns and classify images into distinct categories
+
+Challenges:
+	> Scarcity of data
+	> Quality of data
+	> Opacity of models, lack of interpretability
+	> Imabalanced datasets
+
+
+• Shen L, Margolies LR, Rothstein JH, Fluder E, McBride R, Sieh W. Deep Learning to Improve Breast Cancer Detection on Screening Mammography. Sci Rep. 2019 Aug 29;9(1):12495. doi: 10.1038/s41598-019-48995-4. PMID: 31467326; PMCID: PMC6715802.

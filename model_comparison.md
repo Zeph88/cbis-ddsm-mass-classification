@@ -258,3 +258,23 @@ threshold : 0.45, accuracy : 0.455026455026455, precision : 0.41194029850746267,
 threshold : 0.5, accuracy : 0.5132275132275133, precision : 0.4405144694533762, recall : 0.9319727891156463
 
 Best run : Epoch 29 > accuracy: 0.7012 - auc: 0.7619 - loss: 0.5871 - precision_40: 0.6459 - precision_50: 0.7105 - recall_40: 0.7769 - recall_50: 0.6024 - val_accuracy: 0.5992 - val_auc: 0.6206 - val_loss: 0.6964 - val_precision_40: 0.5750 - val_precision_50: 0.5936 - val_recall_40: 0.9583 - val_recall_50: 0.9028
+
+
+
+
+Inputs : 224 x 224 pixel soft factor 0.7 + no zoom
+
+seed : 42
+
+seed : 123
+
+minimum probability : 0.07891450077295303, maximum probability : 0.9505782127380371, average probability : 0.5673747658729553
+AUC: 0.733427570162264
+threshold : 0.35, accuracy : 0.4973544973544973, precision : 0.43130990415335463, recall : 0.9183673469387755
+threshold : 0.4, accuracy : 0.5396825396825397, precision : 0.4536082474226804, recall : 0.8979591836734694
+threshold : 0.45, accuracy : 0.6031746031746031, precision : 0.4942084942084942, recall : 0.8707482993197279
+threshold : 0.5, accuracy : 0.6349206349206349, precision : 0.5191489361702127, recall : 0.8299319727891157
+
+Best run : Epoch 48 > accuracy: 0.7220 - auc: 0.7884 - loss: 0.5627 - precision_40: 0.6343 - precision_50: 0.7080 - recall_40: 0.8337 - recall_50: 0.6836 - val_accuracy: 0.6342 - val_auc: 0.6550 - val_loss: 0.6592 - val_precision_40: 0.6202 - val_precision_50: 0.6359 - val_recall_40: 0.8958 - val_recall_50: 0.8125
+
+seed : 999
