@@ -43,3 +43,4 @@ wandb/
 mlruns/*.keras
 *.npy
 data/preprocessed/
+reports/

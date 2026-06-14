@@ -31,8 +31,10 @@ for row in df_unique[0]:
 exceptions = [x for x in patient_set if len(patient_set[x]) > 1] 
 print(exceptions)
 
-print(df_train["patient_id"].value_counts().describe())
-print(df_test["patient_id"].value_counts().describe())
+# print(df_train["patient_id"].value_counts().describe())
+# print(df_test["patient_id"].value_counts().describe())
 
-print(df_train["patient_id"].value_counts().head(20))
-print(df_test["patient_id"].value_counts().head(20))
+# print(df_train["patient_id"].value_counts().head(20))
+# print(df_test["patient_id"].value_counts().head(20))
+
+df_test

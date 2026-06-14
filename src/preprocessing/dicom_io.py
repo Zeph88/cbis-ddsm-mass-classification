@@ -46,8 +46,27 @@ def read_dicom_as_array(dicom_path):
     return img
 
 
+def crop_image(img, top=0.0, bottom=0.0, left=0.0, right=0.0):
+    h, w = img.shape[:2]
+    top_px = int(h * top)
+    bottom_px = int(h * bottom)
+    left_px = int(w * left)
+    right_px = int(w * right)
+    img = img[
+        top_px:h - bottom_px,
+        left_px:w - right_px
+    ]
+    return img
+
+
 def dicom_to_tf_tensor(dicom_path, size=(224, 224)):
     img = read_dicom_as_array(dicom_path)
+
+    return img
+
+def resize_tensor(img, size=(224, 224)):
+
+    img = crop_image(img, 0.15, 0.02, 0.15, 0)
 
     # [H, W] -> [H, W, 1]
     img = np.expand_dims(img, axis=-1)

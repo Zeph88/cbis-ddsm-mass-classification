@@ -8,7 +8,7 @@ from typing import Union, Callable
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
-from src.preprocessing.dicom_io import dicom_to_tf_tensor, apply_roi_mask, apply_roi_emphasis, apply_roi_soft_mask
+from src.preprocessing.dicom_io import dicom_to_tf_tensor, apply_roi_mask, apply_roi_emphasis, apply_roi_soft_mask, resize_tensor
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_NPY
 
 
@@ -103,6 +103,15 @@ def get_mask_diagnostics(mask_np: np.ndarray) -> dict:
         "bbox_center_x": float((x_min + x_max) / 2),
     }
 
+def flip_left_right_any(x):
+    if isinstance(x, tf.Tensor):
+        if len(x.shape) == 2:
+            return tf.reverse(x, axis=[1])
+        return tf.image.flip_left_right(x)
+    else:
+        x = np.asarray(x)
+        return np.fliplr(x)
+
 def orient_by_breast_mass(image, mask=None, target_side="right", threshold=0.05):
     """
     Standardizes visual orientation based on the side where most breast tissue appears.
@@ -149,10 +158,10 @@ def orient_by_breast_mass(image, mask=None, target_side="right", threshold=0.05)
         raise ValueError("target_side must be 'left' or 'right'")
 
     if should_flip:
-        image = tf.image.flip_left_right(image)
+        image = flip_left_right_any(image)
 
         if mask is not None:
-            mask = tf.image.flip_left_right(mask)
+            mask = flip_left_right_any(mask)
 
     if mask is not None:
         return image, mask
@@ -368,6 +377,9 @@ def mask_preprocess_roi_images(
 
         image, mask = orient_by_breast_mass(image, mask)
 
+        image = resize_tensor(image)
+        mask = resize_tensor(mask)
+
         image_np = tensor_to_2d_np(image)
         mask_np = tensor_to_2d_np(mask)
 
@@ -527,7 +539,7 @@ if __name__ == "__main__":
             zoom_to_roi=False,
             #zoom_margin=30,
             mask_mode="soft",
-            factor=0.7,
+            factor=0.3,
             debug_limit=50,
         )
     
