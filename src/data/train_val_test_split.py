@@ -3,8 +3,6 @@ import pandas as pd
 from sklearn.model_selection import train_test_split, GroupShuffleSplit
 from src.config import OUTPUT_NPY, SEED, PROCESSED_DIR
 
-IMAGES_INDEX = OUTPUT_NPY / "soft_mask"
-# PREPROCESSED_INDEX = OUTPUT_NPY / "dataset_index_roi_masked.csv"
 PREPROCESSED_INDEX = PROCESSED_DIR / "mass_dataset_index.csv"
 
 df = pd.read_csv(PREPROCESSED_INDEX)

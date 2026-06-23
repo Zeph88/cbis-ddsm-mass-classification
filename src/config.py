@@ -1,8 +1,11 @@
 from pathlib import Path
 
-SEED = 999
+SEED = 42
 BATCH_SIZE = 16
 EPOCHS = 50
+PIXELS_H = 768
+PIXELS_W = 512
+CROP_SIZE = 512 # Liao methodology
 
 PROJECT_ROOT = Path("/home/julien/cbis-ddsm")
 DATA_ROOT = PROJECT_ROOT / "data"
@@ -11,6 +14,7 @@ MODEL_ROOT = SRC_ROOT / "models"
 METADATA_DIR = DATA_ROOT / "metadata"
 PROCESSED_DIR = DATA_ROOT / "processed"
 OUTPUT_NPY = DATA_ROOT / "preprocessed"
+OUTPUT_MODEL = SRC_ROOT / "models"
 
 IMAGES_ROOT = Path("/home/julien/datasets/cbis-ddsm/cbis_ddsm")
 

@@ -2,7 +2,18 @@ import sys
 from pathlib import Path 
 import pandas as pd 
 import numpy as np 
-from src.functions import fetch_image, check_path
+from src.functions import check_path
+
+
+def fetch_image(path_csv_train, path_csv_test, image_root):
+    csv_path_train = Path(path_csv_train)
+    csv_path_test = Path(path_csv_test)
+    images_root = Path(image_root)
+
+    df_train = pd.read_csv(csv_path_train)
+    df_test = pd.read_csv(csv_path_test)
+
+    return df_train, df_test, images_root
 
 PROJECT_ROOT = Path("/home/julien/cbis-ddsm")
 sys.path.insert(0, str(PROJECT_ROOT))

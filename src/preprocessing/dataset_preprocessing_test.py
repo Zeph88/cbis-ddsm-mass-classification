@@ -8,10 +8,211 @@ import time
 
 import matplotlib.pyplot as plt
 import tensorflow as tf
+import cv2
+from src.preprocessing.dicom_handling import read_dicom_as_array, crop_image, remove_annotations, fix_border
+from src.config import IMAGES_ROOT, OUTPUT_NPY, PIXELS_H, PIXELS_W, CROP_SIZE
 
-from src.preprocessing.dicom_handling import read_dicom_as_array, crop_image, resize_with_padding, remove_annotations, fix_border
-from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_NPY, PIXELS_H, PIXELS_W, CROP_SIZE
 
+import numpy as np
+import tensorflow as tf
+import cv2
+
+
+def crop_breast_to_target_ratio(
+    image,
+    target_size=(768, 512),
+    threshold_ratio=0.01,
+    margin_ratio=0.02,
+):
+    """
+    Crops tightly around the breast, then adjusts the crop by removing
+    excess width or height to match the target aspect ratio.
+
+    No padding and no expansion into background are performed.
+    """
+
+    image_np = (
+        image.numpy()
+        if isinstance(image, tf.Tensor)
+        else np.asarray(image)
+    )
+
+    if image_np.ndim == 3 and image_np.shape[-1] == 1:
+        image_2d = image_np[:, :, 0]
+    elif image_np.ndim == 2:
+        image_2d = image_np
+    else:
+        raise ValueError(
+            f"Expected (H, W) or (H, W, 1), got {image_np.shape}"
+        )
+
+    if not np.isfinite(image_2d).all():
+        raise ValueError("Image contains NaN or infinite values.")
+
+    height, width = image_2d.shape
+
+    image_min = float(image_2d.min())
+    image_max = float(image_2d.max())
+
+    if image_max <= image_min:
+        raise ValueError("Image has no usable intensity range.")
+
+    threshold = (
+        image_min
+        + threshold_ratio * (image_max - image_min)
+    )
+
+    foreground = (
+        image_2d > threshold
+    ).astype(np.uint8)
+
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE,
+        (7, 7),
+    )
+
+    foreground = cv2.morphologyEx(
+        foreground,
+        cv2.MORPH_CLOSE,
+        kernel,
+        iterations=2,
+    )
+
+    foreground = cv2.morphologyEx(
+        foreground,
+        cv2.MORPH_OPEN,
+        kernel,
+        iterations=1,
+    )
+
+    number_of_labels, labels, stats, _ = (
+        cv2.connectedComponentsWithStats(
+            foreground,
+            connectivity=8,
+        )
+    )
+
+    if number_of_labels <= 1:
+        raise ValueError("No breast component found.")
+
+    component_areas = stats[
+        1:,
+        cv2.CC_STAT_AREA,
+    ]
+
+    best_label = 1 + int(
+        np.argmax(component_areas)
+    )
+
+    x = int(
+        stats[best_label, cv2.CC_STAT_LEFT]
+    )
+    y = int(
+        stats[best_label, cv2.CC_STAT_TOP]
+    )
+    box_width = int(
+        stats[best_label, cv2.CC_STAT_WIDTH]
+    )
+    box_height = int(
+        stats[best_label, cv2.CC_STAT_HEIGHT]
+    )
+
+    margin_x = int(round(width * margin_ratio))
+    margin_y = int(round(height * margin_ratio))
+
+    x_min = max(0, x - margin_x)
+    x_max = min(
+        width,
+        x + box_width + margin_x,
+    )
+
+    y_min = max(0, y - margin_y)
+    y_max = min(
+        height,
+        y + box_height + margin_y,
+    )
+
+    crop = image_2d[
+        y_min:y_max,
+        x_min:x_max,
+    ]
+
+    crop_height, crop_width = crop.shape
+
+    target_height, target_width = target_size
+    target_ratio = target_width / target_height
+    current_ratio = crop_width / crop_height
+
+    if current_ratio < target_ratio:
+        # Crop too narrow:
+        # reduce height rather than expanding into black background.
+        desired_height = int(
+            round(crop_width / target_ratio)
+        )
+
+        desired_height = min(
+            desired_height,
+            crop_height,
+        )
+
+        excess_height = (
+            crop_height - desired_height
+        )
+
+        crop_top = excess_height // 2
+        crop_bottom = (
+            excess_height - crop_top
+        )
+
+        crop = crop[
+            crop_top:
+            crop_height - crop_bottom,
+            :
+        ]
+
+    elif current_ratio > target_ratio:
+        # Crop too wide:
+        # reduce width while preserving the right side.
+        desired_width = int(
+            round(crop_height * target_ratio)
+        )
+
+        desired_width = min(
+            desired_width,
+            crop_width,
+        )
+
+        # Breast is oriented to the right:
+        # remove excess width from the left.
+        crop = crop[
+            :,
+            crop_width - desired_width:,
+        ]
+
+    crop = crop[..., np.newaxis]
+
+    resized = tf.image.resize(
+        crop,
+        size=target_size,
+        method="bilinear",
+        antialias=True,
+    )
+
+    resized = tf.clip_by_value(
+        resized,
+        0.0,
+        1.0,
+    )
+
+    resized.set_shape(
+        (
+            target_height,
+            target_width,
+            1,
+        )
+    )
+
+    return resized
 
 def clear_directory(directory_path: Union[str, Path]) -> list:
     """
@@ -336,15 +537,15 @@ def save_crop_mask_debug(
 def preprocess_images(
     df,
     images_root=IMAGES_ROOT,
-    debug_limit: int = 50,
+    debug_limit: int = 5,
     zoom_to_roi: bool = False,
     resolution = (598, 598)
 ):
     
     if zoom_to_roi:
-        zoom_path = f"zoom_{resolution[0]}x{resolution[1]}"
+        zoom_path = f"zoom_{resolution[0]}x{resolution[1]}_test"
     else:
-        zoom_path = f"full_{resolution[0]}x{resolution[1]}"
+        zoom_path = f"full_{resolution[0]}x{resolution[1]}_test"
 
     output_dir = OUTPUT_NPY / zoom_path
     output_dir_exists = os.path.exists(output_dir)
@@ -414,29 +615,13 @@ def preprocess_images(
             start = time.perf_counter()
             breast_crop = remove_annotations(image)
             print(f"remove_annotations: {time.perf_counter() - start:.3f}s")
-            
-            print("before crop", breast_crop.shape)
-            breast_crop = fix_border(breast_crop,50,50)
-            print("after crop", breast_crop.shape)
-
-            plt.figure(figsize=(6, 9))
-            plt.imshow(breast_crop, cmap="gray")
-            plt.axis("off")
-            plt.tight_layout()
-
-            plt.savefig(
-                "cleaned_image_debug.png",
-                dpi=150,
-                bbox_inches="tight",
+            treated_image = crop_breast_to_target_ratio(
+                breast_crop,
+                target_size=(PIXELS_H, PIXELS_W),
+                threshold_ratio=0.01,
+                margin_ratio=0.03,
             )
-
-            plt.close()
-
-            treated_image = breast_crop[..., np.newaxis]
-            start = time.perf_counter()
-            treated_image = resize_with_padding(treated_image, (PIXELS_H, PIXELS_W))
-            print(f"resize_with_padding: {time.perf_counter() - start:.3f}s")
-
+            
         if i < debug_limit:
             save_crop_mask_debug(
                 image=image,
@@ -450,7 +635,7 @@ def preprocess_images(
         output_path = output_dir / f"{row['source']}_{i:05d}.npy"
 
         start = time.perf_counter()
-        np.save(output_path, treated_image.numpy().astype("float32"))
+        np.save(output_path, treated_image)
         print(f"save_numpy: {time.perf_counter() - start:.3f}s")
         processed_rows.append(row.to_dict())
         output_paths.append(str(output_path))
@@ -488,19 +673,19 @@ def add_sample_id(df):
 
 if __name__ == "__main__":
 
-    train_df = pd.read_csv(OUTPUT_NPY / "train_split.csv")
-    val_df = pd.read_csv(OUTPUT_NPY / "val_split.csv")
-    test_df = pd.read_csv(OUTPUT_NPY / "test_split.csv")
+    train_df = pd.read_csv(OUTPUT_NPY / "train_split_test.csv")
+    test_df = pd.read_csv(OUTPUT_NPY / "train_split_test.csv")
 
     train_df["set"] = "train"
-    val_df["set"] = "validation"
     test_df["set"] = "test"
 
     df = pd.concat(
-        [train_df, val_df, test_df],
+        [train_df, test_df],
         axis=0,
         ignore_index=True
     )
+
+    print(f"{len(df)} lines")
 
     df = add_sample_id(df)
 

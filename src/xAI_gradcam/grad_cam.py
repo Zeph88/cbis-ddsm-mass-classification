@@ -2,9 +2,8 @@
 # Adaptation of a code from Keras.io, author fchollet
 
 import os
-from src.preprocessing.dicom_io import dicom_to_tf_tensor, apply_roi_mask, apply_roi_emphasis, apply_roi_soft_mask
 from src.preprocessing.dataset_preprocessing import tensor_to_2d_np, orient_by_breast_mass, crop_zoom_to_roi
-from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_NPY
+from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_NPY, PIXELS_H, PIXELS_W, OUTPUT_MODEL
 
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
@@ -16,13 +15,28 @@ import keras
 from IPython.display import Image, display
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import pandas as pd
 
-# mmg_path="/home/julien/cbis-ddsm/data/preprocessed/soft0.7_full/train_00000.npy"
-mmg_path="/home/julien/cbis-ddsm/data/preprocessed/soft0.3_full/train_00010.npy"
+
+zoom_to_roi=False
+
+
+if zoom_to_roi:
+    zoom_path = "zoom_" + str(PIXELS_H) + "x" + str(PIXELS_W)
+else:
+    zoom_path = "full_" + str(PIXELS_H) + "x" + str(PIXELS_W)
+
+print(f"dataset_index_{zoom_path}.csv")
+
+df = pd.read_csv(OUTPUT_NPY / f"dataset_index_{zoom_path}.csv")
+idx = 71
+mmg_path = df["preprocessed_image_path"][idx]
+true_label = df["label"][idx]
+
 array_npy = np.load(mmg_path)
 array_npy = np.expand_dims(array_npy, axis=0)
 
-model = tf.keras.models.load_model("model_three_nodes_baseline.keras")
+model = tf.keras.models.load_model(OUTPUT_MODEL / "model_global_branch.keras")
 _ = model(array_npy)
 
 last_conv_layer_name = "conv2d_2"
@@ -32,18 +46,11 @@ def make_gradcam_heatmap(img_array, model, last_conv_layer_name):
     # First, we create a model that maps the input image to the activations
     # of the last conv layer as well as the output predictions
 
-    inputs = model.inputs[0]
-    x = inputs
+    last_conv_layer = model.get_layer(last_conv_layer_name)
 
-    for layer in model.layers:
-        x = layer(x)
-        if layer.name == last_conv_layer_name:
-            conv_output = x
-
-    predictions = x
     grad_model = keras.models.Model(
-        inputs=inputs,
-        outputs=[conv_output, predictions]
+        inputs=model.inputs,
+        outputs=[last_conv_layer.output, model.output]
     )
 
     # Then, we compute the gradient of the top predicted class for our input image
@@ -76,27 +83,66 @@ def make_gradcam_heatmap(img_array, model, last_conv_layer_name):
     return heatmap.numpy()
 
 
-# Print what the top predicted class is
+# Predict
 preds = model.predict(array_npy)
-print(preds)
+prob = float(preds[0][0])
+pred_label = int(prob >= 0.5)
 
-# Generate class activation heatmap
+true_class = "MALIGNANT" if true_label == 1 else "BENIGN"
+pred_class = "MALIGNANT" if pred_label == 1 else "BENIGN"
+
+# Generate Grad-CAM heatmap
 heatmap = make_gradcam_heatmap(array_npy, model, last_conv_layer_name)
 
-# Display heatmap
-plt.matshow(heatmap)
+# Original image: remove batch/channel dimensions
+img = np.squeeze(array_npy).astype("float32")
+
+# Resize heatmap properly to image size
+heatmap_resized = tf.image.resize(
+    heatmap[..., np.newaxis],
+    (img.shape[0], img.shape[1])
+).numpy().squeeze()
+
+# Normalize heatmap
+heatmap_resized = np.maximum(heatmap_resized, 0)
+heatmap_resized = heatmap_resized / (heatmap_resized.max() + 1e-8)
+
+# Convert grayscale image to RGB
+img_rgb = np.stack([img, img, img], axis=-1)
+
+# Convert heatmap to RGB using a colormap
+cmap = mpl.colormaps["jet"]
+heatmap_rgb = cmap(heatmap_resized)[..., :3]
+
+# Blend image and heatmap
+alpha = 0.35
+overlay = (1 - alpha) * img_rgb + alpha * heatmap_rgb
+overlay = np.clip(overlay, 0, 1)
+
+# Save clean Grad-CAM overlay
+plt.figure(figsize=(7, 7))
+plt.imshow(overlay)
+plt.title(
+    f"True: {true_class} | Pred: {pred_class} | P(malignant): {prob:.4f}"
+)
 plt.axis("off")
-plt.savefig("gradcam_output.png", dpi=300, bbox_inches="tight")
+plt.savefig("gradcam_overlay.png", dpi=300, bbox_inches="tight")
 plt.close()
 
-array_npy = np.squeeze(array_npy)
-print(array_npy.shape)
-heatmap.resize((224, 224))
-print(heatmap.shape)
-
-treated_image = apply_roi_soft_mask(array_npy, heatmap, 0.3)
-# Display heatmap
-plt.matshow(treated_image)
+plt.figure(figsize=(7, 7))
+plt.imshow(heatmap_resized, cmap="jet")
+plt.title(
+    f"Grad-CAM heatmap | True: {true_class} | Pred: {pred_class}"
+)
 plt.axis("off")
-plt.savefig("gradcam_output_superposed.png", dpi=300, bbox_inches="tight")
+plt.savefig("gradcam_heatmap_only.png", dpi=300, bbox_inches="tight")
+plt.close()
+
+plt.figure(figsize=(7, 7))
+plt.imshow(img, cmap="gray")
+plt.title(
+    f"Original | True: {true_class} | Pred: {pred_class} | P(malignant): {prob:.4f}"
+)
+plt.axis("off")
+plt.savefig("gradcam_original.png", dpi=300, bbox_inches="tight")
 plt.close()
