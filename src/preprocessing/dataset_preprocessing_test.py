@@ -9,7 +9,7 @@ import time
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import cv2
-from src.preprocessing.dicom_handling import read_dicom_as_array, crop_image, remove_annotations, fix_border
+from src.preprocessing.dicom_handling import read_dicom_as_array, crop_image, remove_annotations
 from src.config import IMAGES_ROOT, OUTPUT_NPY, PIXELS_H, PIXELS_W, CROP_SIZE
 
 

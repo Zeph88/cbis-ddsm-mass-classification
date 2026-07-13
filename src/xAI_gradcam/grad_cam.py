@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-zoom_to_roi=False
+zoom_to_roi=True
 
 
 if zoom_to_roi:
@@ -29,14 +29,14 @@ else:
 print(f"dataset_index_{zoom_path}.csv")
 
 df = pd.read_csv(OUTPUT_NPY / f"dataset_index_{zoom_path}.csv")
-idx = 71
+idx = 2
 mmg_path = df["preprocessed_image_path"][idx]
 true_label = df["label"][idx]
 
 array_npy = np.load(mmg_path)
 array_npy = np.expand_dims(array_npy, axis=0)
 
-model = tf.keras.models.load_model(OUTPUT_MODEL / "model_global_branch.keras")
+model = tf.keras.models.load_model(OUTPUT_MODEL / "model_local_branch.keras")
 _ = model(array_npy)
 
 last_conv_layer_name = "conv2d_2"

@@ -5,6 +5,222 @@ from scipy import ndimage
 import cv2
 from src.config import PIXELS_H, PIXELS_W
 
+def tensor_to_2d_np(x) -> np.ndarray:
+    """
+    Converts a TensorFlow tensor or NumPy array to a 2D NumPy array.
+    Expected input is usually H x W x 1.
+    """
+    if isinstance(x, tf.Tensor):
+        x = x.numpy()
+
+    x = np.asarray(x)
+
+    if x.ndim == 3 and x.shape[-1] == 1:
+        x = x[:, :, 0]
+    elif x.ndim == 3:
+        x = np.squeeze(x)
+
+    if x.ndim != 2:
+        raise ValueError(f"Expected 2D image after squeeze, got shape {x.shape}")
+
+    return x
+
+def crop_breast_to_target_ratio(
+    image,
+    target_size=(PIXELS_H, PIXELS_W),
+    threshold_ratio=0.01,
+    margin_ratio=0.02,
+):
+    """
+    Crops tightly around the breast, then adjusts the crop by removing
+    excess width or height to match the target aspect ratio.
+
+    No padding and no expansion into background are performed.
+    """
+
+    image_np = (
+        image.numpy()
+        if isinstance(image, tf.Tensor)
+        else np.asarray(image)
+    )
+
+    if image_np.ndim == 3 and image_np.shape[-1] == 1:
+        image_2d = image_np[:, :, 0]
+    elif image_np.ndim == 2:
+        image_2d = image_np
+    else:
+        raise ValueError(
+            f"Expected (H, W) or (H, W, 1), got {image_np.shape}"
+        )
+
+    if not np.isfinite(image_2d).all():
+        raise ValueError("Image contains NaN or infinite values.")
+
+    height, width = image_2d.shape
+
+    image_min = float(image_2d.min())
+    image_max = float(image_2d.max())
+
+    if image_max <= image_min:
+        raise ValueError("Image has no usable intensity range.")
+
+    threshold = (
+        image_min
+        + threshold_ratio * (image_max - image_min)
+    )
+
+    foreground = (
+        image_2d > threshold
+    ).astype(np.uint8)
+
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE,
+        (7, 7),
+    )
+
+    foreground = cv2.morphologyEx(
+        foreground,
+        cv2.MORPH_CLOSE,
+        kernel,
+        iterations=2,
+    )
+
+    foreground = cv2.morphologyEx(
+        foreground,
+        cv2.MORPH_OPEN,
+        kernel,
+        iterations=1,
+    )
+
+    number_of_labels, labels, stats, _ = (
+        cv2.connectedComponentsWithStats(
+            foreground,
+            connectivity=8,
+        )
+    )
+
+    if number_of_labels <= 1:
+        raise ValueError("No breast component found.")
+
+    component_areas = stats[
+        1:,
+        cv2.CC_STAT_AREA,
+    ]
+
+    best_label = 1 + int(
+        np.argmax(component_areas)
+    )
+
+    x = int(
+        stats[best_label, cv2.CC_STAT_LEFT]
+    )
+    y = int(
+        stats[best_label, cv2.CC_STAT_TOP]
+    )
+    box_width = int(
+        stats[best_label, cv2.CC_STAT_WIDTH]
+    )
+    box_height = int(
+        stats[best_label, cv2.CC_STAT_HEIGHT]
+    )
+
+    margin_x = int(round(width * margin_ratio))
+    margin_y = int(round(height * margin_ratio))
+
+    x_min = max(0, x - margin_x)
+    x_max = min(
+        width,
+        x + box_width + margin_x,
+    )
+
+    y_min = max(0, y - margin_y)
+    y_max = min(
+        height,
+        y + box_height + margin_y,
+    )
+
+    crop = image_2d[
+        y_min:y_max,
+        x_min:x_max,
+    ]
+
+    crop_height, crop_width = crop.shape
+
+    target_height, target_width = target_size
+    target_ratio = target_width / target_height
+    current_ratio = crop_width / crop_height
+
+    if current_ratio < target_ratio:
+        # Crop too narrow:
+        # reduce height rather than expanding into black background.
+        desired_height = int(
+            round(crop_width / target_ratio)
+        )
+
+        desired_height = min(
+            desired_height,
+            crop_height,
+        )
+
+        excess_height = (
+            crop_height - desired_height
+        )
+
+        crop_top = excess_height // 2
+        crop_bottom = (
+            excess_height - crop_top
+        )
+
+        crop = crop[
+            crop_top:
+            crop_height - crop_bottom,
+            :
+        ]
+
+    elif current_ratio > target_ratio:
+        # Crop too wide:
+        # reduce width while preserving the right side.
+        desired_width = int(
+            round(crop_height * target_ratio)
+        )
+
+        desired_width = min(
+            desired_width,
+            crop_width,
+        )
+
+        # Breast is oriented to the right:
+        # remove excess width from the left.
+        crop = crop[
+            :,
+            crop_width - desired_width:,
+        ]
+
+    crop = crop[..., np.newaxis]
+
+    resized = tf.image.resize(
+        crop,
+        size=target_size,
+        method="bilinear",
+        antialias=True,
+    )
+
+    resized = tf.clip_by_value(
+        resized,
+        0.0,
+        1.0,
+    )
+
+    resized.set_shape(
+        (
+            target_height,
+            target_width,
+            1,
+        )
+    )
+
+    return resized
+
 def apply_roi_soft_mask(image, mask, factor=0.3):
     mask = tf.cast(mask > 0, tf.float32)
     return image * mask + image * (1 - mask) * factor
@@ -258,7 +474,7 @@ def remove_annotations(
 
 def fix_border(image,x_pad,y_pad):
 
-    height, width, channel = image.shape
+    height, width = image.shape
 
     coef_x = x_pad / width
     coef_y = y_pad // 2 / height

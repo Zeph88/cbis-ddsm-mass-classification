@@ -9,7 +9,7 @@ import time
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
-from src.preprocessing.dicom_handling import read_dicom_as_array, crop_image, resize_with_padding, remove_annotations, fix_border
+from src.preprocessing.dicom_handling import read_dicom_as_array, crop_image, resize_with_padding, remove_annotations, fix_border, tensor_to_2d_np, crop_breast_to_target_ratio
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_NPY, PIXELS_H, PIXELS_W, CROP_SIZE
 
 
@@ -36,26 +36,6 @@ def clear_directory(directory_path: Union[str, Path]) -> list:
 
     return erroneous_paths
 
-
-def tensor_to_2d_np(x) -> np.ndarray:
-    """
-    Converts a TensorFlow tensor or NumPy array to a 2D NumPy array.
-    Expected input is usually H x W x 1.
-    """
-    if isinstance(x, tf.Tensor):
-        x = x.numpy()
-
-    x = np.asarray(x)
-
-    if x.ndim == 3 and x.shape[-1] == 1:
-        x = x[:, :, 0]
-    elif x.ndim == 3:
-        x = np.squeeze(x)
-
-    if x.ndim != 2:
-        raise ValueError(f"Expected 2D image after squeeze, got shape {x.shape}")
-
-    return x
 
 
 def get_mask_diagnostics(mask_np: np.ndarray) -> dict:
@@ -214,18 +194,13 @@ def crop_zoom_to_roi(
     then resizes the crop to output_size.
     """
 
-    image_np = tensor_to_2d_np(image).astype("float32")
-    mask_np = tensor_to_2d_np(mask).astype("float32")
-
-    if image_np.shape != mask_np.shape:
-        raise ValueError(
-            f"Image and mask shapes differ: image={image_np.shape}, mask={mask_np.shape}"
-        )
+    if image_np.ndim!=2 or mask_np.ndim!=2:
+        raise ValueError("Both mask and mammogram should be in 2D for proper handling")
 
     crop  = geometric_center(image_np, mask_np)
 
-    crop = crop[..., np.newaxis]
-    crop = tf.convert_to_tensor(crop, dtype=tf.float32)
+    # crop = crop[..., np.newaxis]
+    # crop = tf.convert_to_tensor(crop, dtype=tf.float32)
     
     if crop.shape[:2] != output_size:
         crop = tf.image.resize(crop, output_size)
@@ -255,7 +230,6 @@ def save_crop_mask_debug(
     image_np = image
     mask_np = mask
     masked_np = masked_image
-
 
     if image_np.shape != mask_np.shape:
         raise ValueError(
@@ -341,67 +315,79 @@ def preprocess_images(
     resolution = (598, 598)
 ):
     
+    # Define the relative file path and the pipeline depending the mammogram is cropped or not
     if zoom_to_roi:
-        zoom_path = f"zoom_{resolution[0]}x{resolution[1]}"
+        file_path = f"zoom_{resolution[0]}x{resolution[1]}"
     else:
-        zoom_path = f"full_{resolution[0]}x{resolution[1]}"
+        file_path = f"full_{resolution[0]}x{resolution[1]}"
 
-    output_dir = OUTPUT_NPY / zoom_path
+    # Set the absolute file path
+    output_dir = OUTPUT_NPY / file_path
     output_dir_exists = os.path.exists(output_dir)
 
+    # If it exists, clean the folder. If not, create it.
     if output_dir_exists:
         clear_directory(output_dir)
     else:
         output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Create a folder to save the debug files
     debug_dir = output_dir / "debug_preview"
     debug_dir.mkdir(parents=True, exist_ok=True)
 
+    # Filter records to those that have a 0 or 1 label
     df = df[df["keep"] == True].reset_index(drop=True)
 
+    # processed_rows retains all cases that can be used after the preprocessing was successfully performed
     processed_rows = []
+    # output_paths adds the location of the processed image and adds a column to processed_rows dataframe 
     output_paths = []
 
-    OUTPUT_NPY.mkdir(parents=True, exist_ok=True)
-    output_dir.mkdir(parents=True, exist_ok=True)
 
+    # OUTPUT_NPY.mkdir(parents=True, exist_ok=True)
+    # output_dir.mkdir(parents=True, exist_ok=True)
+
+    # counts the cases that were set out of scope
     skipped_shape_mismatch = 0
+
+    # Loop over all sets
     for i, row in df.iterrows():
+
+        # Retrieve absolute path to DICOMs
         mmg_path = images_root / row["resolved_image_file_path"]
         roi_path = images_root / row["resolved_roi_rel_path"]
 
+        # Convert DICOMs to 2D numpy arrays and normalize values form 0 to 1 
         image = read_dicom_as_array(dicom_path=mmg_path)
         mask = read_dicom_as_array(dicom_path=roi_path)
 
-        start = time.perf_counter()
+        # Orient the breast tissue to the right side of the image
         image, mask = orient_by_breast_mass(image, mask)
-        print(f"orient_image_to_right: {time.perf_counter() - start:.3f}s")
-
-        image_np = tensor_to_2d_np(image)
-        mask_np = tensor_to_2d_np(mask)
         
-        start = time.perf_counter()
+
+        # image_np = tensor_to_2d_np(image)
+        # mask_np = tensor_to_2d_np(mask)
+        
+
         # Control the size of the image matches the size of the mask.
-        if image_np.shape != mask_np.shape:
+        if image.shape != mask.shape:
             print(
                 f"Shape mismatch at index={i}: "
-                f"mammogram={image_np.shape}, mask={mask_np.shape}, "
+                f"mammogram={image.shape}, mask={mask.shape}, "
                 f"mmg_path={mmg_path}, roi_path={roi_path}"
             )
             skipped_shape_mismatch += 1
             continue
-        print(f"control1: {time.perf_counter() - start:.3f}s")
-
-        start = time.perf_counter()
+        
         # Control the mask displays a ROI
-        if np.count_nonzero(mask_np > 0) == 0:
+        if np.count_nonzero(mask > 0) == 0:
             print(
                 f"The mask contains no positive pixel at index={i}: "
                 f"mmg_path={mmg_path}, roi_path={roi_path}"
             )
             skipped_shape_mismatch += 1
             continue
-        print(f"control2: {time.perf_counter() - start:.3f}s")
+        
 
         if zoom_to_roi:
             treated_image = crop_zoom_to_roi(
@@ -409,34 +395,21 @@ def preprocess_images(
                 mask=mask,
                 output_size=resolution  
             ) 
+            treated_image = breast_crop[..., np.newaxis]
         else:
             
-            start = time.perf_counter()
+            # Remove annotations from the mammogram
             breast_crop = remove_annotations(image)
-            print(f"remove_annotations: {time.perf_counter() - start:.3f}s")
             
-            print("before crop", breast_crop.shape)
-            breast_crop = fix_border(breast_crop,50,50)
-            print("after crop", breast_crop.shape)
-
-            plt.figure(figsize=(6, 9))
-            plt.imshow(breast_crop, cmap="gray")
-            plt.axis("off")
-            plt.tight_layout()
-
-            plt.savefig(
-                "cleaned_image_debug.png",
-                dpi=150,
-                bbox_inches="tight",
+            # Crop image to remove white borders and excessive padding, which could create noise
+            treated_image =  crop_breast_to_target_ratio(
+                breast_crop,
+                target_size=(PIXELS_H, PIXELS_W),
+                threshold_ratio=0.01,
+                margin_ratio=0.03,
             )
-
-            plt.close()
-
-            treated_image = breast_crop[..., np.newaxis]
-            start = time.perf_counter()
-            treated_image = resize_with_padding(treated_image, (PIXELS_H, PIXELS_W))
-            print(f"resize_with_padding: {time.perf_counter() - start:.3f}s")
-
+            
+            
         if i < debug_limit:
             save_crop_mask_debug(
                 image=image,
@@ -449,16 +422,14 @@ def preprocess_images(
 
         output_path = output_dir / f"{row['source']}_{i:05d}.npy"
 
-        start = time.perf_counter()
         np.save(output_path, treated_image.numpy().astype("float32"))
-        print(f"save_numpy: {time.perf_counter() - start:.3f}s")
         processed_rows.append(row.to_dict())
         output_paths.append(str(output_path))
 
     processed_df = pd.DataFrame(processed_rows)
     processed_df["preprocessed_image_path"] = output_paths
 
-    output_csv = OUTPUT_NPY / f"dataset_index_{zoom_path}.csv"
+    output_csv = OUTPUT_NPY / f"dataset_index_{file_path}.csv"
     processed_df.to_csv(output_csv, index=False)
 
     print(f"Saved preprocessed index to: {output_csv}")

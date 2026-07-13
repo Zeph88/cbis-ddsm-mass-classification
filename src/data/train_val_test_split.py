@@ -1,11 +1,9 @@
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split, GroupShuffleSplit
-from src.config import OUTPUT_NPY, SEED, PROCESSED_DIR
+from src.config import OUTPUT_NPY, SEED, PROCESSED_DIR, DATASET_INDEX
 
-PREPROCESSED_INDEX = PROCESSED_DIR / "mass_dataset_index.csv"
-
-df = pd.read_csv(PREPROCESSED_INDEX)
+df = pd.read_csv(DATASET_INDEX)
 
 def check_no_patient_leakage(train_df, val_df, test_df=None):
     train_patients = set(train_df["patient_id"])

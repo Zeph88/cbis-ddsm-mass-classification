@@ -3,8 +3,8 @@ from pathlib import Path
 SEED = 42
 BATCH_SIZE = 16
 EPOCHS = 50
-PIXELS_H = 768
-PIXELS_W = 512
+PIXELS_H = 256
+PIXELS_W = 256
 CROP_SIZE = 512 # Liao methodology
 
 PROJECT_ROOT = Path("/home/julien/cbis-ddsm")

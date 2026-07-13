@@ -5,30 +5,48 @@ from src.config import DATASET_INDEX, IMAGES_ROOT, BATCH_SIZE, PIXELS_H, PIXELS_
 import math
 
 
-def build_tf_dataset(df, batch_size=16, shuffle=True, seed=42):
+def build_tf_dataset(df, batch_size=16, shuffle=True, seed=42, path_image="preprocessed_image_path", added_path_image="", 
+    image_height=PIXELS_H, image_width=PIXELS_W, added_image_height=0, added_image_width=0):
 
-    # df = df[(df["keep"] == True)].reset_index(drop=True)
-
-    paths = df["preprocessed_image_path"].tolist()
+    has_added_image = added_path_image != ""
+    paths = df[path_image].tolist()
     labels = df["label"].astype("int32").tolist()
 
-    def load_npy(path, label):
+    if has_added_image:
+        added_paths = df[added_path_image].tolist()
+
+    def load_npy(*args):
+        if has_added_image:
+            path, added_path, label = args
+            image = np.load(path.decode("utf-8")).astype("float32")
+            added_image = np.load(added_path.decode("utf-8")).astype("float32")
+
+            return image, added_image, label
+
+        path, label = args
         image = np.load(path.decode("utf-8")).astype("float32")
+
         return image, label
 
-    def tf_load_npy(path, label):
-        image, label = tf.numpy_function(
-            load_npy,
-            [path, label],
-            [tf.float32, tf.int32]
-        )
+    def tf_load_npy(*args):
+        if has_added_image:
+            image, added_image, label = tf.numpy_function(load_npy, list(args), [tf.float32, tf.float32, tf.int32])
+            image.set_shape((image_height, image_width, 1))
+            added_image.set_shape((added_image_height, added_image_width, 1))
+            label.set_shape(())
 
-        image.set_shape((PIXELS_H, PIXELS_W, 1))
+            return (image, added_image), label
+
+        image, label = tf.numpy_function(load_npy, list(args), [tf.float32, tf.int32])
+        image.set_shape((image_height, image_width, 1))
         label.set_shape(())
 
         return image, label
 
-    dataset = tf.data.Dataset.from_tensor_slices((paths, labels))
+    if has_added_image:
+        dataset = tf.data.Dataset.from_tensor_slices((paths, added_paths, labels))
+    else:
+        dataset = tf.data.Dataset.from_tensor_slices((paths, labels))
 
     if shuffle:
         dataset = dataset.shuffle(buffer_size=len(df), seed=seed, reshuffle_each_iteration=True)
@@ -40,33 +58,17 @@ def build_tf_dataset(df, batch_size=16, shuffle=True, seed=42):
 
     return dataset
 
+def train_val_test_sets(data, batch_size=BATCH_SIZE, seed=SEED, path_image="preprocessed_image_path", added_path_image="", 
+    image_height=PIXELS_H, image_width=PIXELS_W, added_image_height=0, added_image_width=0):
 
-def train_val_test_sets(
-        data,
-        batch_size=BATCH_SIZE, 
-        seed=SEED
-        ):
+    train_ds = build_tf_dataset(data[data["set"]=="train"], batch_size=batch_size, shuffle=True, seed=seed, path_image=path_image, added_path_image=added_path_image, 
+        image_height=image_height, image_width=image_width, added_image_height=added_image_height, added_image_width=added_image_width)
 
-    train_ds = build_tf_dataset(
-        data[data["set"]=="train"],
-        batch_size=batch_size,
-        shuffle=True,
-        seed=seed
-    )
-
-    val_ds = build_tf_dataset(
-        data[data["set"]=="validation"],
-        batch_size=batch_size,
-        shuffle=False,
-        seed=seed
-    )
-
-    test_ds = build_tf_dataset(
-        data[data["set"]=="test"],
-        batch_size=batch_size,
-        shuffle=False,
-        seed=seed
-    )
+    val_ds = build_tf_dataset(data[data["set"]=="validation"], batch_size=batch_size, shuffle=False, seed=seed, path_image=path_image, added_path_image=added_path_image, 
+        image_height=image_height, image_width=image_width, added_image_height=added_image_height, added_image_width=added_image_width)
+        
+    test_ds = build_tf_dataset(data[data["set"]=="test"], batch_size=batch_size, shuffle=False, seed=seed, path_image=path_image, added_path_image=added_path_image, 
+        image_height=image_height, image_width=image_width, added_image_height=added_image_height, added_image_width=added_image_width)
 
     return train_ds, val_ds, test_ds
 
