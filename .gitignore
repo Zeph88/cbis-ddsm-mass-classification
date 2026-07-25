@@ -44,3 +44,5 @@ mlruns/*.keras
 *.npy
 data/preprocessed/
 reports/
+src/plots/
+src/models/
