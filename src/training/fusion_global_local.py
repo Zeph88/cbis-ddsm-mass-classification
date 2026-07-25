@@ -16,6 +16,8 @@ import pandas as pd
 
 def fusion_models(local_model, global_model, feature_conv_layer_name):
 
+    regularizer = tf.keras.regularizers.l2(1e-4)
+
     local_extractor = tf.keras.Model(
         inputs=local_model.input,
         outputs=local_model.get_layer(feature_conv_layer_name).output,
@@ -37,9 +39,23 @@ def fusion_models(local_model, global_model, feature_conv_layer_name):
     local_x = local_extractor(local_input, training=False)
     global_x = global_extractor(global_input, training=False)
     
+    # ====================================================================================
+    # Regularization (2nd improvement)
+    # ====================================================================================
+
+    local_x = tf.keras.layers.LayerNormalization(name="local_normalization")(local_x)
+    global_x = tf.keras.layers.LayerNormalization(name="global_normalization")(global_x)
+
+    local_x = tf.keras.layers.Dense(32, activation="relu", kernel_regularizer=regularizer, name="local_projection")(local_x)
+    global_x = tf.keras.layers.Dense(32, activation="relu", kernel_regularizer=regularizer, name="global_projection")(global_x)
+    
+    # ====================================================================================
+    # Regularization (2nd improvement)
+    # ====================================================================================
+
     x = tf.keras.layers.Concatenate(name="feature_fusion")([
         global_x,
-        local_x,
+        local_x
     ])
 
     # x = tf.keras.layers.Dense(128, activation="relu", name="fusion_dense")(x)

@@ -1,834 +1,808 @@
-import gc
-import hashlib
-import json
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
-from src.config import (
-    OUTPUT_NPY,
-    OUTPUT_MODEL,
-    PIXELS_H,
-    PIXELS_W,
-    SEED,
+from sklearn.metrics import (
+    log_loss,
+    brier_score_loss,
+    roc_auc_score,
+)
+
+from src.training.cnn_evaluation import (
+    cnn_predict,
+    evaluate_thresholds,
+)
+from src.training.dataset_preparation import (
+    cnn_steps,
+    train_val_test_sets,
 )
 from src.functions import set_seed
+from src.config import (
+    OUTPUT_MODEL,
+    OUTPUT_NPY,
+    SEED,
+    BATCH_SIZE,
+    EPOCHS,
+    PIXELS_H,
+    PIXELS_W,
+    OUTPUT_PLOT,
+)
 
 
-# ============================================================
-# CONFIGURATION
-# ============================================================
+# ================================================================
+# Reproducibility
+# ================================================================
 
-ZOOM_TO_ROI = False
-RESOLUTION = (PIXELS_H, PIXELS_W)
-
-SAMPLES_PER_CLASS = 8
-BATCH_SIZE_DEBUG = 4
-EPOCHS_DEBUG = 50
-LEARNING_RATE = 1e-3
-
-# Arrête un test lorsque les 16 images sont parfaitement mémorisées.
-TARGET_ACCURACY = 1.0
-TARGET_LOSS = 1e-3
-
-RESULTS_DIR = OUTPUT_MODEL / "ablation_tests"
-RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+set_seed(SEED)
 
 
-# ============================================================
-# REPRODUCTIBILITÉ
-# ============================================================
+# ================================================================
+# Dataset preparation
+# ================================================================
 
-def reset_environment(seed=SEED):
+zoom_to_roi = True
+resolution = (PIXELS_H, PIXELS_W)
+
+if zoom_to_roi:
+    file_path = f"zoom_{resolution[0]}x{resolution[1]}"
+else:
+    file_path = f"full_{resolution[0]}x{resolution[1]}"
+
+dataset_index_path = (
+    OUTPUT_NPY / f"dataset_index_{file_path}.csv"
+)
+
+print(f"Loading: {dataset_index_path}")
+
+df = pd.read_csv(dataset_index_path)
+
+train_ds, val_ds, test_ds = train_val_test_sets(
+    df,
+    BATCH_SIZE,
+    SEED,
+)
+
+train_steps, val_steps, test_steps = cnn_steps(df)
+
+
+# ================================================================
+# Raw BCE metric
+#
+# The normal Keras loss includes the L2 regularisation penalty.
+# This custom metric computes only the BCE of the predictions.
+#
+# It also fixes the rank mismatch:
+#     y_true: (batch,)
+#     y_pred: (batch, 1)
+# ================================================================
+
+@tf.keras.utils.register_keras_serializable(
+    package="CustomMetrics"
+)
+def raw_bce(y_true, y_pred):
+    y_true = tf.cast(
+        y_true,
+        dtype=y_pred.dtype,
+    )
+
+    y_true = tf.reshape(
+        y_true,
+        tf.shape(y_pred),
+    )
+
+    return tf.keras.losses.binary_crossentropy(
+        y_true,
+        y_pred,
+    )
+
+
+# ================================================================
+# External probability metrics
+# ================================================================
+
+def prepare_binary_arrays(y_true, y_prob):
     """
-    Nettoie la session Keras et réinitialise les générateurs aléatoires.
+    Converts targets and predictions to flat NumPy arrays and clips
+    probabilities to avoid log(0) in BCE calculations.
     """
 
-    tf.keras.backend.clear_session()
-    gc.collect()
-    set_seed(seed)
+    y_true = np.asarray(y_true).astype(np.int32).ravel()
+    y_prob = np.asarray(y_prob).astype(np.float64).ravel()
+
+    y_prob_clipped = np.clip(
+        y_prob,
+        1e-7,
+        1.0 - 1e-7,
+    )
+
+    return y_true, y_prob, y_prob_clipped
 
 
-# ============================================================
-# CHARGEMENT DU PETIT DATASET
-# ============================================================
-
-def load_balanced_debug_dataset(
-    dataframe,
-    samples_per_class=8,
+def calculate_probability_metrics(
+    y_true,
+    y_prob,
+    naive_probability,
 ):
     """
-    Charge un échantillon fixe et équilibré directement depuis les fichiers
-    .npy, sans passer par tf.data.
+    Computes threshold-independent probability metrics.
+
+    The naive model predicts the positive-class prevalence observed
+    in the training set for every image.
     """
 
-    required_columns = {
-        "set",
-        "keep",
-        "label",
-        "preprocessed_image_path",
+    y_true, y_prob, y_prob_clipped = prepare_binary_arrays(
+        y_true,
+        y_prob,
+    )
+
+    naive_probability = float(
+        np.clip(
+            naive_probability,
+            1e-7,
+            1.0 - 1e-7,
+        )
+    )
+
+    naive_probabilities = np.full(
+        shape=y_true.shape,
+        fill_value=naive_probability,
+        dtype=np.float64,
+    )
+
+    model_bce = log_loss(
+        y_true,
+        y_prob_clipped,
+        labels=[0, 1],
+    )
+
+    naive_bce = log_loss(
+        y_true,
+        naive_probabilities,
+        labels=[0, 1],
+    )
+
+    model_brier = brier_score_loss(
+        y_true,
+        y_prob,
+    )
+
+    naive_brier = brier_score_loss(
+        y_true,
+        naive_probabilities,
+    )
+
+    auc = roc_auc_score(
+        y_true,
+        y_prob,
+    )
+
+    bce_gain = naive_bce - model_bce
+
+    relative_bce_gain = (
+        bce_gain / naive_bce
+        if naive_bce > 0
+        else np.nan
+    )
+
+    brier_gain = naive_brier - model_brier
+
+    return {
+        "auc": auc,
+        "raw_bce": model_bce,
+        "naive_bce": naive_bce,
+        "bce_gain": bce_gain,
+        "relative_bce_gain": relative_bce_gain,
+        "brier_score": model_brier,
+        "naive_brier_score": naive_brier,
+        "brier_gain": brier_gain,
+        "minimum_probability": float(y_prob.min()),
+        "maximum_probability": float(y_prob.max()),
+        "average_probability": float(y_prob.mean()),
+        "positive_rate": float(y_true.mean()),
     }
 
-    missing_columns = required_columns - set(dataframe.columns)
 
-    if missing_columns:
-        raise ValueError(
-            f"Colonnes manquantes : {missing_columns}"
-        )
+def print_probability_report(
+    dataset_name,
+    metrics,
+):
+    """
+    Prints the probability-quality report for one dataset.
+    """
 
-    train_df = dataframe.loc[
-        (dataframe["set"] == "train")
-        & (dataframe["keep"] == True)
-    ].copy()
+    print("\n" + "=" * 70)
+    print(f"{dataset_name} probability metrics")
+    print("=" * 70)
 
-    train_df["label"] = train_df["label"].astype("int32")
-
-    print("\nDistribution du train complet :")
-    print(train_df["label"].value_counts().sort_index())
-
-    available_labels = set(train_df["label"].unique())
-
-    if available_labels != {0, 1}:
-        raise ValueError(
-            f"Les labels doivent être 0 et 1. Labels reçus : "
-            f"{available_labels}"
-        )
-
-    selected_parts = []
-
-    for label in [0, 1]:
-        class_df = train_df.loc[
-            train_df["label"] == label
-        ]
-
-        if len(class_df) < samples_per_class:
-            raise ValueError(
-                f"Classe {label} : seulement {len(class_df)} images "
-                f"disponibles pour {samples_per_class} demandées."
-            )
-
-        selected_parts.append(
-            class_df.sample(
-                n=samples_per_class,
-                random_state=SEED,
-            )
-        )
-
-    debug_df = pd.concat(
-        selected_parts,
-        ignore_index=True,
+    print(
+        "Observed positive rate: "
+        f"{metrics['positive_rate']:.4f}"
     )
 
-    # Mélange fixe pour que chaque architecture reçoive exactement les
-    # mêmes images dans le même ordre.
-    debug_df = debug_df.sample(
-        frac=1,
-        random_state=SEED,
-    ).reset_index(drop=True)
-
-    images = []
-    labels = []
-    paths = []
-
-    expected_shape = (
-        PIXELS_H,
-        PIXELS_W,
-        1,
+    print(
+        "Minimum probability:    "
+        f"{metrics['minimum_probability']:.8f}"
     )
 
-    for index, row in debug_df.iterrows():
-        image_path = Path(
-            str(row["preprocessed_image_path"])
-        )
+    print(
+        "Maximum probability:    "
+        f"{metrics['maximum_probability']:.8f}"
+    )
 
-        if not image_path.exists():
-            raise FileNotFoundError(
-                f"Fichier introuvable : {image_path}"
-            )
+    print(
+        "Average probability:    "
+        f"{metrics['average_probability']:.4f}"
+    )
 
-        image = np.load(
-            image_path
-        ).astype("float32")
+    print(f"AUC:                    {metrics['auc']:.4f}")
 
-        if image.shape == (PIXELS_H, PIXELS_W):
-            image = image[..., np.newaxis]
+    print(
+        f"Raw BCE:                "
+        f"{metrics['raw_bce']:.4f}"
+    )
 
-        if image.shape != expected_shape:
-            raise ValueError(
-                f"Shape incorrecte pour {image_path}: "
-                f"{image.shape}, attendu={expected_shape}"
-            )
+    print(
+        f"Naive BCE:              "
+        f"{metrics['naive_bce']:.4f}"
+    )
 
-        if not np.isfinite(image).all():
-            raise ValueError(
-                f"NaN ou Inf dans {image_path}"
-            )
+    print(
+        f"Absolute BCE gain:      "
+        f"{metrics['bce_gain']:+.4f}"
+    )
 
-        label = int(row["label"])
+    print(
+        f"Relative BCE gain:      "
+        f"{metrics['relative_bce_gain']:+.2%}"
+    )
 
-        images.append(image)
-        labels.append(label)
-        paths.append(str(image_path))
+    print(
+        f"Brier score:            "
+        f"{metrics['brier_score']:.4f}"
+    )
 
+    print(
+        f"Naive Brier score:      "
+        f"{metrics['naive_brier_score']:.4f}"
+    )
+
+    print(
+        f"Brier improvement:      "
+        f"{metrics['brier_gain']:+.4f}"
+    )
+
+    if metrics["bce_gain"] > 0:
         print(
-            f"{index + 1:02d} | "
-            f"label={label} | "
-            f"min={image.min():.6f} | "
-            f"max={image.max():.6f} | "
-            f"mean={image.mean():.6f} | "
-            f"std={image.std():.6f}"
+            "BCE conclusion: the model beats the naive "
+            "prevalence predictor."
         )
-
-    x_debug = np.stack(images).astype("float32")
-    y_debug = np.asarray(labels).astype("float32")
-
-    return x_debug, y_debug, paths
-
-
-# ============================================================
-# CONTRÔLE DES DONNÉES
-# ============================================================
-
-def validate_debug_dataset(
-    images,
-    labels,
-    paths,
-):
-    print("\n" + "=" * 72)
-    print("VALIDATION DU DATASET")
-    print("=" * 72)
-
-    print("Images :", images.shape, images.dtype)
-    print("Labels :", labels.shape, labels.dtype)
-
-    unique_labels, label_counts = np.unique(
-        labels,
-        return_counts=True,
-    )
-
-    print(
-        "Distribution :",
-        dict(zip(unique_labels, label_counts)),
-    )
-
-    print(
-        f"Valeurs : min={images.min():.6f}, "
-        f"max={images.max():.6f}, "
-        f"mean={images.mean():.6f}, "
-        f"std={images.std():.6f}"
-    )
-
-    if len(images) != len(labels):
-        raise ValueError(
-            "Le nombre d'images ne correspond pas au nombre de labels."
-        )
-
-    if set(unique_labels) != {0.0, 1.0}:
-        raise ValueError(
-            f"Labels invalides : {unique_labels}"
-        )
-
-    hashes = [
-        hashlib.md5(image.tobytes()).hexdigest()
-        for image in images
-    ]
-
-    print(
-        f"Images uniques : {len(set(hashes))}/{len(hashes)}"
-    )
-
-    hash_to_labels = {}
-
-    for image_hash, label in zip(hashes, labels):
-        hash_to_labels.setdefault(
-            image_hash,
-            set(),
-        ).add(int(label))
-
-    conflicts = {
-        image_hash: associated_labels
-        for image_hash, associated_labels
-        in hash_to_labels.items()
-        if len(associated_labels) > 1
-    }
-
-    if conflicts:
-        raise ValueError(
-            f"Images identiques avec labels contradictoires : {conflicts}"
-        )
-
-    print("Premiers fichiers :")
-
-    for path, label in zip(paths[:5], labels[:5]):
-        print(f"  label={int(label)} | {path}")
-
-
-# ============================================================
-# BLOC CONVOLUTIONNEL
-# ============================================================
-
-def convolutional_backbone(
-    inputs,
-    use_batch_norm,
-    use_l2,
-):
-    """
-    Reproduit le backbone de ton architecture normale.
-    """
-
-    x = inputs
-
-    regularizer = (
-        tf.keras.regularizers.l2(1e-4)
-        if use_l2
-        else None
-    )
-
-    for filters in [16, 32, 64]:
-        x = tf.keras.layers.Conv2D(
-            filters=filters,
-            kernel_size=3,
-            padding="same",
-            use_bias=not use_batch_norm,
-            kernel_regularizer=regularizer,
-        )(x)
-
-        if use_batch_norm:
-            x = tf.keras.layers.BatchNormalization()(x)
-
-        x = tf.keras.layers.ReLU()(x)
-        x = tf.keras.layers.MaxPooling2D(
-            pool_size=2
-        )(x)
-
-    return x
-
-
-# ============================================================
-# CONSTRUCTION PARAMÉTRABLE DU MODÈLE
-# ============================================================
-
-def build_test_model(
-    input_shape,
-    pooling_mode="average",
-    use_batch_norm=True,
-    use_l2=True,
-    dropout_rate=0.5,
-):
-    """
-    pooling_mode:
-        - "average"
-        - "maximum"
-        - "average_maximum"
-        - "flatten"
-    """
-
-    inputs = tf.keras.Input(
-        shape=input_shape
-    )
-
-    x = convolutional_backbone(
-        inputs=inputs,
-        use_batch_norm=use_batch_norm,
-        use_l2=use_l2,
-    )
-
-    if pooling_mode == "average":
-        x = tf.keras.layers.GlobalAveragePooling2D()(x)
-
-    elif pooling_mode == "maximum":
-        x = tf.keras.layers.GlobalMaxPooling2D()(x)
-
-    elif pooling_mode == "average_maximum":
-        average = (
-            tf.keras.layers.GlobalAveragePooling2D()(x)
-        )
-
-        maximum = (
-            tf.keras.layers.GlobalMaxPooling2D()(x)
-        )
-
-        x = tf.keras.layers.Concatenate()(
-            [average, maximum]
-        )
-
-    elif pooling_mode == "flatten":
-        x = tf.keras.layers.Flatten()(x)
-
     else:
-        raise ValueError(
-            f"Pooling inconnu : {pooling_mode}"
+        print(
+            "BCE conclusion: the model does not beat the naive "
+            "prevalence predictor."
         )
 
-    x = tf.keras.layers.Dense(
-        128,
-        activation="relu",
+
+# ================================================================
+# Label extraction
+# ================================================================
+
+def collect_dataset_labels(dataset):
+    """
+    Collects labels from a finite tf.data.Dataset.
+    """
+
+    labels = []
+
+    for _, batch_labels in dataset:
+        labels.append(
+            np.asarray(batch_labels).ravel()
+        )
+
+    if not labels:
+        raise ValueError(
+            "No labels were found in the dataset."
+        )
+
+    return np.concatenate(labels).astype(np.int32)
+
+
+train_labels = collect_dataset_labels(train_ds)
+
+train_prevalence = float(
+    np.mean(train_labels)
+)
+
+print(
+    "\nTraining malignant prevalence used by the naive model: "
+    f"{train_prevalence:.4f}"
+)
+
+
+# ================================================================
+# Model
+# ================================================================
+
+def build_resnet50_transfer(
+    input_shape=(PIXELS_H, PIXELS_W, 1),
+    dropout_rate=0.5,
+    spatial_dropout_rate=0.10,
+):
+    inputs = tf.keras.Input(
+        shape=input_shape,
+        name="mammogram_input",
+    )
+
+    # Applied only during training.
+    data_augmentation = tf.keras.Sequential(
+        [
+            tf.keras.layers.RandomFlip(
+                mode="horizontal",
+                seed=SEED,
+                name="random_horizontal_flip",
+            ),
+        ],
+        name="data_augmentation",
+    )
+
+    x = data_augmentation(inputs)
+
+    # Grayscale image copied into three identical channels.
+    x = tf.keras.layers.Concatenate(
+        axis=-1,
+        name="grayscale_to_rgb",
+    )([x, x, x])
+
+    # Keep this only when train_ds provides pixels in [0, 1].
+    x = tf.keras.layers.Rescaling(
+        scale=255.0,
+        name="restore_255_scale",
     )(x)
 
-    if dropout_rate > 0:
-        x = tf.keras.layers.Dropout(
-            dropout_rate
-        )(x)
+    x = tf.keras.applications.resnet50.preprocess_input(x)
+
+    base_model = tf.keras.applications.ResNet50(
+        include_top=False,
+        weights="imagenet",
+        input_shape=(
+            input_shape[0],
+            input_shape[1],
+            3,
+        ),
+    )
+
+    base_model.trainable = False
+
+    # Keeps BatchNormalization layers in inference mode.
+    x = base_model(
+        x,
+        training=False,
+    )
+
+    # Spatial reduction:
+    # approximately 12x12x2048 -> 3x3x2048 for a 384x384 input.
+    x = tf.keras.layers.MaxPooling2D(
+        pool_size=(4, 4),
+        strides=(4, 4),
+        padding="same",
+        name="resnet_spatial_max_pooling",
+    )(x)
+
+    # Temporarily removes entire feature maps during training.
+    x = tf.keras.layers.SpatialDropout2D(
+        rate=spatial_dropout_rate,
+        name="resnet_spatial_dropout",
+    )(x)
+
+    x = tf.keras.layers.Flatten(
+        name="resnet_flatten",
+    )(x)
+
+    x = tf.keras.layers.Dropout(
+        rate=dropout_rate,
+        name="classification_dropout",
+    )(x)
 
     outputs = tf.keras.layers.Dense(
-        1,
+        units=1,
         activation="sigmoid",
+        kernel_regularizer=tf.keras.regularizers.l2(
+            1e-5
+        ),
+        name="classification_output",
     )(x)
 
-    return tf.keras.Model(
+    model = tf.keras.Model(
         inputs=inputs,
         outputs=outputs,
+        name="local_resnet50_transfer",
     )
 
-
-# ============================================================
-# CALLBACK D'ARRÊT POUR MÉMORISATION
-# ============================================================
-
-class StopWhenMemorized(tf.keras.callbacks.Callback):
-    """
-    Arrête l'entraînement lorsque les images sont mémorisées.
-    """
-
-    def __init__(
-        self,
-        target_accuracy=1.0,
-        target_loss=1e-3,
-    ):
-        super().__init__()
-
-        self.target_accuracy = target_accuracy
-        self.target_loss = target_loss
-
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-
-        accuracy = logs.get("accuracy")
-        loss = logs.get("loss")
-
-        if accuracy is None or loss is None:
-            return
-
-        if (
-            accuracy >= self.target_accuracy
-            and loss <= self.target_loss
-        ):
-            print(
-                "\nDataset mémorisé : "
-                f"accuracy={accuracy:.4f}, "
-                f"loss={loss:.6f}"
-            )
-
-            self.model.stop_training = True
+    return model, base_model
 
 
-# ============================================================
-# EXÉCUTION D'UN TEST
-# ============================================================
+model, base_model = build_resnet50_transfer(
+    input_shape=(PIXELS_H, PIXELS_W, 1),
+    dropout_rate=0.5,
+    spatial_dropout_rate=0.10,
+)
 
-def run_ablation_test(
-    test_name,
-    config,
-    images,
-    labels,
-):
-    print("\n\n" + "#" * 80)
-    print(f"TEST : {test_name}")
-    print("#" * 80)
 
-    print(
-        json.dumps(
-            config,
-            indent=2,
-        )
-    )
+# ================================================================
+# Compilation
+# ================================================================
 
-    reset_environment()
+model.compile(
+    optimizer=tf.keras.optimizers.Adam(
+        learning_rate=1e-4,
+    ),
 
-    model = build_test_model(
-        input_shape=(
-            PIXELS_H,
-            PIXELS_W,
-            1,
+    # Optimisation objective:
+    # BCE plus any regularisation penalties.
+    loss=tf.keras.losses.BinaryCrossentropy(),
+
+    metrics=[
+        tf.keras.metrics.BinaryAccuracy(
+            name="accuracy",
         ),
-        **config,
-    )
 
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(
-            learning_rate=LEARNING_RATE
+        tf.keras.metrics.AUC(
+            name="auc",
+            curve="ROC",
         ),
-        loss=tf.keras.losses.BinaryCrossentropy(),
-        metrics=[
-            tf.keras.metrics.BinaryAccuracy(
-                name="accuracy"
-            ),
-            tf.keras.metrics.AUC(
-                name="auc"
-            ),
-        ],
-    )
 
-    print(
-        f"Paramètres : {model.count_params():,}"
-    )
+        tf.keras.metrics.AUC(
+            name="pr_auc",
+            curve="PR",
+        ),
 
-    probabilities_before = model.predict(
-        images,
-        verbose=0,
-    ).reshape(-1)
+        # BCE without L2 contribution.
+        tf.keras.metrics.MeanMetricWrapper(
+            raw_bce,
+            name="raw_bce",
+        ),
 
-    initial_weights = [
-        weight.copy()
-        for weight in model.get_weights()
+        tf.keras.metrics.Recall(
+            name="recall_40",
+            thresholds=0.40,
+        ),
+        tf.keras.metrics.Precision(
+            name="precision_40",
+            thresholds=0.40,
+        ),
+
+        tf.keras.metrics.Recall(
+            name="recall_45",
+            thresholds=0.45,
+        ),
+        tf.keras.metrics.Precision(
+            name="precision_45",
+            thresholds=0.45,
+        ),
+
+        tf.keras.metrics.Recall(
+            name="recall_50",
+            thresholds=0.50,
+        ),
+        tf.keras.metrics.Precision(
+            name="precision_50",
+            thresholds=0.50,
+        ),
+
+        tf.keras.metrics.Recall(
+            name="recall_55",
+            thresholds=0.55,
+        ),
+        tf.keras.metrics.Precision(
+            name="precision_55",
+            thresholds=0.55,
+        ),
+    ],
+)
+
+
+# ================================================================
+# Run paths
+# ================================================================
+
+run_name = (
+    f"resnet50_local_"
+    f"{PIXELS_H}x{PIXELS_W}_"
+    f"pool4_"
+    f"spatialdrop010_"
+    f"dropout050_"
+    f"lr1e-4_"
+    f"seed{SEED}"
+)
+
+head_checkpoint_path = (
+    OUTPUT_MODEL / f"{run_name}.keras"
+)
+
+csv_log_path = (
+    OUTPUT_MODEL / f"{run_name}.csv"
+)
+
+
+# ================================================================
+# Callbacks
+# ================================================================
+
+callbacks_head = [
+    tf.keras.callbacks.EarlyStopping(
+        monitor="val_loss",
+        mode="min",
+        patience=6,
+        min_delta=1e-3,
+        restore_best_weights=False,
+    ),
+
+    tf.keras.callbacks.ModelCheckpoint(
+        head_checkpoint_path,
+        monitor="val_loss",
+        mode="min",
+        save_best_only=True,
+    ),
+
+    tf.keras.callbacks.ReduceLROnPlateau(
+        monitor="val_loss",
+        mode="min",
+        factor=0.2,
+        patience=3,
+        min_lr=1e-6,
+    ),
+
+    tf.keras.callbacks.CSVLogger(
+        csv_log_path,
+    ),
+]
+
+
+# ================================================================
+# Training
+# ================================================================
+
+history_head = model.fit(
+    train_ds,
+    validation_data=val_ds,
+    epochs=EPOCHS,
+    callbacks=callbacks_head,
+)
+
+
+# ================================================================
+# Load best checkpoint
+# ================================================================
+
+best_model = tf.keras.models.load_model(
+    head_checkpoint_path,
+    compile=False,
+)
+
+
+# ================================================================
+# Predictions
+#
+# During prediction:
+# - dropout is disabled;
+# - SpatialDropout2D is disabled;
+# - RandomFlip is disabled.
+# ================================================================
+
+print("\nGenerating train predictions...")
+train_prob, train_true = cnn_predict(
+    best_model,
+    train_ds,
+)
+
+print("Generating validation predictions...")
+val_prob, val_true = cnn_predict(
+    best_model,
+    val_ds,
+)
+
+print("Generating test predictions...")
+test_prob, test_true = cnn_predict(
+    best_model,
+    test_ds,
+)
+
+
+# ================================================================
+# Probability reports
+# ================================================================
+
+train_report = calculate_probability_metrics(
+    y_true=train_true,
+    y_prob=train_prob,
+    naive_probability=train_prevalence,
+)
+
+val_report = calculate_probability_metrics(
+    y_true=val_true,
+    y_prob=val_prob,
+    naive_probability=train_prevalence,
+)
+
+test_report = calculate_probability_metrics(
+    y_true=test_true,
+    y_prob=test_prob,
+    naive_probability=train_prevalence,
+)
+
+print_probability_report(
+    "TRAIN — inference mode",
+    train_report,
+)
+
+print_probability_report(
+    "VALIDATION",
+    val_report,
+)
+
+print_probability_report(
+    "TEST",
+    test_report,
+)
+
+
+# ================================================================
+# Threshold metrics
+#
+# These are descriptive. The final threshold should ultimately be
+# selected from validation probabilities rather than test results.
+# ================================================================
+
+print("\nValidation threshold metrics:")
+evaluate_thresholds(
+    val_prob,
+    val_true,
+)
+
+print("\nTest threshold metrics:")
+evaluate_thresholds(
+    test_prob,
+    test_true,
+)
+
+
+# ================================================================
+# Summary table
+# ================================================================
+
+metrics_summary = pd.DataFrame(
+    [
+        {
+            "dataset": "train",
+            **train_report,
+        },
+        {
+            "dataset": "validation",
+            **val_report,
+        },
+        {
+            "dataset": "test",
+            **test_report,
+        },
     ]
+)
 
-    history = model.fit(
-        x=images,
-        y=labels,
-        batch_size=BATCH_SIZE_DEBUG,
-        epochs=EPOCHS_DEBUG,
-        shuffle=False,
-        verbose=0,
-        callbacks=[
-            StopWhenMemorized(
-                target_accuracy=TARGET_ACCURACY,
-                target_loss=TARGET_LOSS,
-            )
-        ],
-    )
+summary_path = (
+    OUTPUT_MODEL / f"{run_name}_probability_metrics.csv"
+)
 
-    final_weights = model.get_weights()
+metrics_summary.to_csv(
+    summary_path,
+    index=False,
+)
 
-    probabilities_after = model.predict(
-        images,
-        verbose=0,
-    ).reshape(-1)
-
-    evaluation = model.evaluate(
-        images,
-        labels,
-        batch_size=BATCH_SIZE_DEBUG,
-        verbose=0,
-        return_dict=True,
-    )
-
-    weight_changes = [
-        float(
-            np.mean(
-                np.abs(
-                    final_weight
-                    - initial_weight
-                )
-            )
-        )
-        for initial_weight, final_weight
-        in zip(
-            initial_weights,
-            final_weights,
-        )
-    ]
-
-    predicted_labels = (
-        probabilities_after >= 0.5
-    ).astype("int32")
-
-    epochs_completed = len(
-        history.history["loss"]
-    )
-
-    result = {
-        "test_name": test_name,
-        "pooling_mode": config["pooling_mode"],
-        "use_batch_norm": config["use_batch_norm"],
-        "use_l2": config["use_l2"],
-        "dropout_rate": config["dropout_rate"],
-        "parameters": model.count_params(),
-        "epochs_completed": epochs_completed,
-        "final_loss": float(evaluation["loss"]),
-        "final_accuracy": float(evaluation["accuracy"]),
-        "final_auc": float(evaluation["auc"]),
-        "minimum_probability": float(
-            probabilities_after.min()
-        ),
-        "maximum_probability": float(
-            probabilities_after.max()
-        ),
-        "probability_std": float(
-            probabilities_after.std()
-        ),
-        "maximum_weight_change": max(
-            weight_changes
-        ),
-        "memorized": bool(
-            evaluation["accuracy"] >= 0.999
-        ),
-    }
-
-    print("\nRésultat :")
-
-    print(
-        f"  epochs     : {epochs_completed}"
-    )
-    print(
-        f"  loss       : {result['final_loss']:.6f}"
-    )
-    print(
-        f"  accuracy   : {result['final_accuracy']:.4f}"
-    )
-    print(
-        f"  AUC        : {result['final_auc']:.4f}"
-    )
-    print(
-        f"  prob min   : "
-        f"{result['minimum_probability']:.6f}"
-    )
-    print(
-        f"  prob max   : "
-        f"{result['maximum_probability']:.6f}"
-    )
-    print(
-        f"  prob std   : "
-        f"{result['probability_std']:.6f}"
-    )
-    print(
-        f"  mémorisé   : {result['memorized']}"
-    )
-
-    print("\nPrédictions finales :")
-
-    for index, (
-        true_label,
-        probability,
-        predicted_label,
-    ) in enumerate(
-        zip(
-            labels,
-            probabilities_after,
-            predicted_labels,
-        )
-    ):
-        print(
-            f"  {index:02d} | "
-            f"true={int(true_label)} | "
-            f"prob={probability:.6f} | "
-            f"pred={predicted_label}"
-        )
-
-    history_df = pd.DataFrame(
-        history.history
-    )
-
-    safe_test_name = (
-        test_name
-        .lower()
-        .replace(" ", "_")
-        .replace("+", "plus")
-        .replace("/", "_")
-    )
-
-    history_df.to_csv(
-        RESULTS_DIR
-        / f"history_{safe_test_name}.csv",
-        index=False,
-    )
-
-    model.save(
-        RESULTS_DIR
-        / f"model_{safe_test_name}.keras"
-    )
-
-    del model
-    gc.collect()
-
-    return result
+print(
+    f"\nProbability metrics saved to: {summary_path}"
+)
 
 
-# ============================================================
-# SCRIPT PRINCIPAL
-# ============================================================
+# ================================================================
+# Plot: total loss
+#
+# loss includes BCE + L2 regularisation.
+# ================================================================
 
-if __name__ == "__main__":
+plt.figure(figsize=(8, 5))
 
-    reset_environment()
+plt.plot(
+    history_head.history["loss"],
+    label="Train total loss",
+)
 
-    if ZOOM_TO_ROI:
-        dataset_folder = (
-            f"zoom_{RESOLUTION[0]}x{RESOLUTION[1]}"
-        )
-    else:
-        dataset_folder = (
-            f"full_{RESOLUTION[0]}x{RESOLUTION[1]}"
-        )
+plt.plot(
+    history_head.history["val_loss"],
+    label="Validation total loss",
+)
 
-    csv_path = (
-        OUTPUT_NPY
-        / f"dataset_index_{dataset_folder}.csv"
-    )
+plt.xlabel("Epoch")
+plt.ylabel("BCE + regularisation")
+plt.title("Training and validation total loss")
+plt.legend()
+plt.grid(True)
 
-    print("CSV :", csv_path)
+plt.savefig(
+    OUTPUT_PLOT / f"{run_name}_total_loss.png",
+    dpi=300,
+    bbox_inches="tight",
+)
 
-    df = pd.read_csv(csv_path)
+plt.close()
 
-    print("Dimensions CSV :", df.shape)
 
-    x_debug, y_debug, debug_paths = (
-        load_balanced_debug_dataset(
-            dataframe=df,
-            samples_per_class=SAMPLES_PER_CLASS,
-        )
-    )
+# ================================================================
+# Plot: raw BCE
+#
+# raw_bce excludes the L2 regularisation penalty.
+# ================================================================
 
-    validate_debug_dataset(
-        images=x_debug,
-        labels=y_debug,
-        paths=debug_paths,
-    )
+plt.figure(figsize=(8, 5))
 
-    # Chaque test ne modifie qu'un ou quelques éléments.
-    tests = {
-        "01_baseline_originale": {
-            "pooling_mode": "average",
-            "use_batch_norm": True,
-            "use_l2": True,
-            "dropout_rate": 0.5,
-        },
+plt.plot(
+    history_head.history["raw_bce"],
+    label="Train raw BCE",
+)
 
-        "02_sans_l2": {
-            "pooling_mode": "average",
-            "use_batch_norm": True,
-            "use_l2": False,
-            "dropout_rate": 0.5,
-        },
+plt.plot(
+    history_head.history["val_raw_bce"],
+    label="Validation raw BCE",
+)
 
-        "03_sans_dropout": {
-            "pooling_mode": "average",
-            "use_batch_norm": True,
-            "use_l2": True,
-            "dropout_rate": 0.0,
-        },
+plt.axhline(
+    y=val_report["naive_bce"],
+    linestyle="--",
+    label=(
+        "Naive validation BCE "
+        f"({val_report['naive_bce']:.3f})"
+    ),
+)
 
-        "04_sans_l2_sans_dropout": {
-            "pooling_mode": "average",
-            "use_batch_norm": True,
-            "use_l2": False,
-            "dropout_rate": 0.0,
-        },
+plt.xlabel("Epoch")
+plt.ylabel("Raw binary cross-entropy")
+plt.title("Raw BCE versus naive predictor")
+plt.legend()
+plt.grid(True)
 
-        "05_sans_batch_norm": {
-            "pooling_mode": "average",
-            "use_batch_norm": False,
-            "use_l2": False,
-            "dropout_rate": 0.0,
-        },
+plt.savefig(
+    OUTPUT_PLOT / f"{run_name}_raw_bce.png",
+    dpi=300,
+    bbox_inches="tight",
+)
 
-        "06_global_max_pooling": {
-            "pooling_mode": "maximum",
-            "use_batch_norm": False,
-            "use_l2": False,
-            "dropout_rate": 0.0,
-        },
+plt.close()
 
-        "07_average_plus_maximum": {
-            "pooling_mode": "average_maximum",
-            "use_batch_norm": False,
-            "use_l2": False,
-            "dropout_rate": 0.0,
-        },
 
-        "08_flatten": {
-            "pooling_mode": "flatten",
-            "use_batch_norm": False,
-            "use_l2": False,
-            "dropout_rate": 0.0,
-        },
-    }
+# ================================================================
+# Plot: AUC
+# ================================================================
 
-    all_results = []
+plt.figure(figsize=(8, 5))
 
-    for test_name, test_config in tests.items():
-        try:
-            result = run_ablation_test(
-                test_name=test_name,
-                config=test_config,
-                images=x_debug,
-                labels=y_debug,
-            )
+plt.plot(
+    history_head.history["auc"],
+    label="Train AUC",
+)
 
-            all_results.append(result)
+plt.plot(
+    history_head.history["val_auc"],
+    label="Validation AUC",
+)
 
-        except Exception as error:
-            print(
-                f"\nERREUR pendant {test_name}: "
-                f"{type(error).__name__}: {error}"
-            )
+plt.xlabel("Epoch")
+plt.ylabel("AUC")
+plt.title("Training and validation AUC")
+plt.legend()
+plt.grid(True)
 
-            all_results.append({
-                "test_name": test_name,
-                "error": str(error),
-                "memorized": False,
-            })
+plt.savefig(
+    OUTPUT_PLOT / f"{run_name}_auc.png",
+    dpi=300,
+    bbox_inches="tight",
+)
 
-    results_df = pd.DataFrame(
-        all_results
-    )
-
-    results_df = results_df.sort_values(
-        by=[
-            "final_accuracy",
-            "final_loss",
-        ],
-        ascending=[
-            False,
-            True,
-        ],
-        na_position="last",
-    )
-
-    results_path = (
-        RESULTS_DIR
-        / "ablation_summary.csv"
-    )
-
-    results_df.to_csv(
-        results_path,
-        index=False,
-    )
-
-    print("\n\n" + "=" * 100)
-    print("RÉSUMÉ DES TESTS")
-    print("=" * 100)
-
-    columns_to_display = [
-        column
-        for column in [
-            "test_name",
-            "pooling_mode",
-            "use_batch_norm",
-            "use_l2",
-            "dropout_rate",
-            "parameters",
-            "epochs_completed",
-            "final_loss",
-            "final_accuracy",
-            "final_auc",
-            "probability_std",
-            "memorized",
-        ]
-        if column in results_df.columns
-    ]
-
-    print(
-        results_df[
-            columns_to_display
-        ].to_string(
-            index=False
-        )
-    )
-
-    print(
-        "\nRésumé enregistré dans :",
-        results_path,
-    )
+plt.close()

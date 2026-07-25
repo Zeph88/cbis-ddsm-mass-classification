@@ -194,16 +194,18 @@ def crop_zoom_to_roi(
     then resizes the crop to output_size.
     """
 
-    if image_np.ndim!=2 or mask_np.ndim!=2:
+    if image.ndim!=2 or mask.ndim!=2:
         raise ValueError("Both mask and mammogram should be in 2D for proper handling")
 
-    crop  = geometric_center(image_np, mask_np)
+    crop  = geometric_center(image, mask)
 
     # crop = crop[..., np.newaxis]
     # crop = tf.convert_to_tensor(crop, dtype=tf.float32)
     
     if crop.shape[:2] != output_size:
+        crop = crop[..., np.newaxis]
         crop = tf.image.resize(crop, output_size)
+        crop = tf.squeeze(crop, axis=-1)
 
     return crop
 
@@ -310,7 +312,7 @@ def save_crop_mask_debug(
 def preprocess_images(
     df,
     images_root=IMAGES_ROOT,
-    debug_limit: int = 50,
+    debug_limit: int = 20,
     zoom_to_roi: bool = False,
     resolution = (598, 598)
 ):
@@ -394,8 +396,8 @@ def preprocess_images(
                 image=image,
                 mask=mask,
                 output_size=resolution  
-            ) 
-            treated_image = breast_crop[..., np.newaxis]
+            )
+            treated_image = treated_image[..., np.newaxis]
         else:
             
             # Remove annotations from the mammogram
@@ -459,9 +461,16 @@ def add_sample_id(df):
 
 if __name__ == "__main__":
 
-    train_df = pd.read_csv(OUTPUT_NPY / "train_split.csv")
-    val_df = pd.read_csv(OUTPUT_NPY / "val_split.csv")
-    test_df = pd.read_csv(OUTPUT_NPY / "test_split.csv")
+    global_preprocessing = True
+
+    if global_preprocessing:
+        add_path = "_global"
+    else:
+        add_path = ""
+
+    train_df = pd.read_csv(OUTPUT_NPY / f"train_split{add_path}.csv")
+    val_df = pd.read_csv(OUTPUT_NPY / f"val_split{add_path}.csv")
+    test_df = pd.read_csv(OUTPUT_NPY / f"test_split{add_path}.csv")
 
     train_df["set"] = "train"
     val_df["set"] = "validation"

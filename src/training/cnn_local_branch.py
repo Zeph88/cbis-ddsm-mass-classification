@@ -39,7 +39,7 @@ def build_baseline_cnn(input_shape=(598, 598, 1)):
     for filters in [32, 64, 128]:
         x = tf.keras.layers.Conv2D(
             filters,
-            kernel_size=3,
+            kernel_size=(3, 3),
             padding="same",
             use_bias=False,
         )(x)
