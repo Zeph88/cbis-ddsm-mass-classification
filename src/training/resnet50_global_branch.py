@@ -47,24 +47,26 @@ def build_resnet50_transfer(
         name="mammogram_input",
     )
 
-    # data_augmentation = tf.keras.Sequential(
-    #     [
-    #         tf.keras.layers.RandomFlip(
-    #             mode="horizontal",
-    #             seed=SEED,
-    #             name="random_horizontal_flip",
-    #         ),
-    #     ],
-    #     name="data_augmentation",
-    # )
+    data_augmentation = tf.keras.Sequential(
+        [
+            tf.keras.layers.RandomRotation(
+                factor=0.01,
+                fill_mode="constant",
+                fill_value=0.0,
+                seed=SEED,
+                name="random_small_rotation",
+            ),
+        ],
+        name="data_augmentation",
+    )
 
-    # x = data_augmentation(inputs)
+    x = data_augmentation(inputs)
 
     # input passed 3 times
     x = tf.keras.layers.Concatenate(
         axis=-1,
         name="grayscale_to_rgb",
-    )([inputs, inputs, inputs])
+    )([x, x, x])
 
     x = tf.keras.layers.Rescaling(
         scale=255.0,
@@ -112,11 +114,26 @@ def build_resnet50_transfer(
         name="classification_dropout",
     )(x)
 
+    # Solve dying ReLU issue
     x = tf.keras.layers.Dense(
         units=8,
-        activation="relu",
+        activation=None,
+        use_bias=False,
         kernel_regularizer=tf.keras.regularizers.l2(1e-5),
         name="mammography_adapter",
+    )(x)
+
+    x = tf.keras.layers.BatchNormalization(
+        name="mammography_adapter_batch_norm"
+    )(x)
+
+    x = tf.keras.layers.ReLU(
+        name="mammography_adapter_relu",
+    )(x)
+
+    x = tf.keras.layers.Dropout(
+        rate=0.2,
+        name="embedding_dropout",
     )(x)
 
     outputs = tf.keras.layers.Dense(

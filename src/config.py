@@ -1,6 +1,6 @@
 from pathlib import Path
 
-SEED = 42
+SEED = 123
 BATCH_SIZE = 16
 EPOCHS = 100
 PIXELS_H = 768
