@@ -177,7 +177,7 @@ model.compile(
 )
 
 head_checkpoint_path = (
-    OUTPUT_MODEL / f"resnet50_head.keras"
+    OUTPUT_MODEL / f"local_resnet50_head.keras"
 )
 
 callbacks_head = [
@@ -201,7 +201,7 @@ callbacks_head = [
         min_lr=1e-6,
     ),
     tf.keras.callbacks.CSVLogger(
-        OUTPUT_MODEL / f"resnet50_head.csv"
+        OUTPUT_MODEL / f"local_resnet50_head.csv"
     ),
 ]
 

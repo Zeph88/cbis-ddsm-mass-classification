@@ -47,26 +47,27 @@ def build_resnet50_transfer(
         name="mammogram_input",
     )
 
-    data_augmentation = tf.keras.Sequential(
-        [
-            tf.keras.layers.RandomRotation(
-                factor=0.01,
-                fill_mode="constant",
-                fill_value=0.0,
-                seed=SEED,
-                name="random_small_rotation",
-            ),
-        ],
-        name="data_augmentation",
-    )
+    # data_augmentation = tf.keras.Sequential(
+    #     [
+    #         tf.keras.layers.RandomTranslation(
+    #             height_factor=0.01,
+    #             width_factor=0.01,
+    #             fill_mode="constant",
+    #             fill_value=0.0,
+    #             seed=SEED,
+    #             name="random_small_translation",
+    #         )
+    #     ],
+    #     name="data_augmentation",
+    # )
 
-    x = data_augmentation(inputs)
+    # x = data_augmentation(inputs)
 
     # input passed 3 times
     x = tf.keras.layers.Concatenate(
         axis=-1,
         name="grayscale_to_rgb",
-    )([x, x, x])
+    )([inputs, inputs, inputs])
 
     x = tf.keras.layers.Rescaling(
         scale=255.0,
@@ -93,21 +94,9 @@ def build_resnet50_transfer(
         name="resnet_spatial_max_pooling",
     )(x)
 
-    # x = tf.keras.layers.SpatialDropout2D(
-    #     rate=0.10,
-    #     name="resnet_spatial_dropout",
-    # )(x)
-
     x = tf.keras.layers.Flatten(
         name="resnet_global_flatten",
     )(x)
-
-    # x = tf.keras.layers.Dense(
-    #     units=8,
-    #     activation="relu",
-    #     kernel_regularizer=tf.keras.regularizers.l2(1e-5),
-    #     name="mammography_adapter",
-    # )(x)
 
     x = tf.keras.layers.Dropout(
         dropout_rate,
@@ -119,7 +108,8 @@ def build_resnet50_transfer(
         units=8,
         activation=None,
         use_bias=False,
-        kernel_regularizer=tf.keras.regularizers.l2(1e-5),
+        # activation="relu",
+        kernel_regularizer=tf.keras.regularizers.l2(1e-4),
         name="mammography_adapter",
     )(x)
 
@@ -139,7 +129,7 @@ def build_resnet50_transfer(
     outputs = tf.keras.layers.Dense(
         units=1,
         activation="sigmoid",
-        kernel_regularizer=tf.keras.regularizers.l2(1e-5),
+        # kernel_regularizer=tf.keras.regularizers.l2(1e-5),
         name="classification_output",
     )(x)
 
