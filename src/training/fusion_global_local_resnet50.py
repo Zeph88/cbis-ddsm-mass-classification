@@ -23,7 +23,7 @@ from src.config import (
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-from src.functions import set_seed
+from src.functions import set_seed, ensure_directory
 
 from src.training.dataset_preparation import (
     train_val_test_sets,
@@ -32,6 +32,9 @@ from src.training.dataset_preparation import (
 # ======================================================================
 # Configuration
 # ======================================================================
+
+ensure_directory(OUTPUT_MODEL)
+ensure_directory(OUTPUT_PLOT)
 
 LOCAL_MODEL_PATH = (
     OUTPUT_MODEL / "local_resnet50_head.keras"

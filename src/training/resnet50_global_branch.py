@@ -5,13 +5,16 @@ from tensorflow.keras import layers, models, datasets
 import matplotlib.pyplot as plt
 from src.training.cnn_evaluation import cnn_predict, evaluate_thresholds
 from src.training.dataset_preparation import cnn_steps, train_val_test_sets
-from src.functions import set_seed
+from src.functions import set_seed, ensure_directory
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, GLOBAL_HEIGHT, GLOBAL_WIDTH, OUTPUT_PLOT
 import math
 import gc
 
 tf.keras.backend.clear_session()
 set_seed(SEED)
+
+ensure_directory(OUTPUT_MODEL)
+ensure_directory(OUTPUT_PLOT)
 
 resolution=(GLOBAL_HEIGHT, GLOBAL_WIDTH)
 

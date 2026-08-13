@@ -5,7 +5,7 @@ import numpy as np
 import pydicom
 from sklearn.metrics import roc_auc_score
 from pydicom.data import get_testdata_files
-from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT, OUTPUT_NPY, BATCH_SIZE, SEED
+from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT, BATCH_SIZE, SEED
 from src.training.dataset_preparation import build_tf_dataset
 import random
 import tensorflow as tf
@@ -39,7 +39,6 @@ def check_path(val, images_root):
 
     return real_folder, relative_path
 
-
-
-
-    
+def ensure_directory(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    return path

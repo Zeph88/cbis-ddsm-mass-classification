@@ -11,10 +11,12 @@ import tensorflow as tf
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
+from src.functions import ensure_directory
+
 from src.config import (
     OUTPUT_NPY,
     OUTPUT_MODEL,
-    OUTPUT_PLOT,  # >>> ADDED
+    OUTPUT_PLOT,
     PIXELS_H,
     PIXELS_W,
 )
@@ -23,6 +25,9 @@ from src.config import (
 # ------------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------------
+
+ensure_directory(OUTPUT_MODEL)
+ensure_directory(OUTPUT_PLOT)
 
 zoom_to_roi = True
 
@@ -42,7 +47,6 @@ df = pd.read_csv(
     OUTPUT_NPY / f"dataset_index_{image_type}.csv"
 )
 
-# >>> ADDED
 # Prefer examples from the test set when the column is available.
 if "set" in df.columns:
     sample_df = (
@@ -55,7 +59,6 @@ else:
 
 idx = 35
 
-# >>> CHANGED
 # iloc avoids relying on the dataframe index labels.
 row = sample_df.iloc[idx]
 
@@ -69,7 +72,6 @@ true_label = int(row["label"])
 
 array_npy = np.load(mmg_path).astype(np.float32)
 
-# >>> ADDED
 # Ensure the image has a channel dimension.
 if array_npy.ndim == 2:
     array_npy = array_npy[..., np.newaxis]
@@ -132,19 +134,10 @@ resnet_backbone = resnet_candidates[0]
 print("ResNet50 backbone:", resnet_backbone.name)
 print("ResNet50 output shape:", resnet_backbone.output_shape)
 
-
-# >>> REMOVED
-# last_conv_layer_name = "conv2d_2"
-#
-# The output of ResNet50 with include_top=False is already the
-# conv5_block3_out feature map.
-
-
 # ------------------------------------------------------------------
 # Reconstruct preprocessing up to the ResNet output
 # ------------------------------------------------------------------
 
-# >>> ADDED
 # Construct a model that produces the ResNet feature maps from the
 # original one-channel mammogram input.
 gradcam_input = tf.keras.Input(
@@ -154,8 +147,6 @@ gradcam_input = tf.keras.Input(
 
 x = gradcam_input
 
-
-# >>> ADDED
 # Apply augmentation only if it exists in the saved model.
 augmentation_layers = [
     layer
@@ -188,7 +179,6 @@ x = restore_255_scale(x)
 x = tf.keras.applications.resnet50.preprocess_input(x)
 
 
-# >>> ADDED
 # ResNet50 include_top=False ends with conv5_block3_out.
 feature_maps = resnet_backbone(
     x,
@@ -206,7 +196,6 @@ feature_model = tf.keras.Model(
 # Recover the trained local classification head
 # ------------------------------------------------------------------
 
-# >>> ADDED
 resnet_position = model.layers.index(
     resnet_backbone
 )

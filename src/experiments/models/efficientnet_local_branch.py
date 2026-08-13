@@ -34,8 +34,7 @@ train_ds, val_ds, test_ds = train_val_test_sets(
 train_steps, val_steps, test_steps = cnn_steps(df)
 
 
-
-def build_resnet50_transfer(
+def build_efficientnetb4_transfer(
     input_shape=(LOCAL_HEIGHT, LOCAL_WIDTH, 1),
     dropout_rate=0.5,
 ):
@@ -57,7 +56,6 @@ def build_resnet50_transfer(
 
     x = data_augmentation(inputs)
 
-    # input passed 3 times
     x = tf.keras.layers.Concatenate(
         axis=-1,
         name="grayscale_to_rgb",
@@ -68,9 +66,7 @@ def build_resnet50_transfer(
         name="restore_255_scale",
     )(x)
 
-    x = tf.keras.applications.resnet50.preprocess_input(x)
-
-    base_model = tf.keras.applications.ResNet50(
+    base_model = tf.keras.applications.EfficientNetB4(
         include_top=False,
         weights="imagenet",
         input_shape=(input_shape[0], input_shape[1], 3),
@@ -78,23 +74,17 @@ def build_resnet50_transfer(
 
     base_model.trainable = False
 
-    # training=False keeps BatchNormalization in inference mode
     x = base_model(x, training=False)
 
     x = tf.keras.layers.MaxPooling2D(
         pool_size=(4, 4),
         strides=(4, 4),
         padding="same",
-        name="resnet_channel_max_pooling",
+        name="efficientnet_channel_max_pooling",
     )(x)
 
-    # x = tf.keras.layers.SpatialDropout2D(
-    #     rate=0.10,
-    #     name="resnet_spatial_dropout",
-    # )(x)
-
     x = tf.keras.layers.Flatten(
-        name="resnet_global_flatten",
+        name="efficientnet_flatten",
     )(x)
 
     x = tf.keras.layers.Dense(
@@ -105,7 +95,7 @@ def build_resnet50_transfer(
     )(x)
 
     x = tf.keras.layers.Dropout(
-        dropout_rate,
+        rate=dropout_rate,
         name="classification_dropout",
     )(x)
 
@@ -119,19 +109,19 @@ def build_resnet50_transfer(
     model = tf.keras.Model(
         inputs=inputs,
         outputs=outputs,
-        name="local_resnet50_transfer",
+        name="local_efficientnetb4_transfer",
     )
 
     return model, base_model
 
-model, base_model = build_resnet50_transfer(
+model, base_model = build_efficientnetb4_transfer(
     input_shape=(LOCAL_HEIGHT, LOCAL_WIDTH, 1),
     dropout_rate=0.5,
 )
 
 model.compile(
     optimizer=tf.keras.optimizers.Adam(
-        learning_rate=1e-4,
+        learning_rate=1e-3,
     ),
     loss=tf.keras.losses.BinaryCrossentropy(),
     metrics=[
@@ -180,7 +170,7 @@ model.compile(
 )
 
 head_checkpoint_path = (
-    OUTPUT_MODEL / f"local_resnet50_head.keras"
+    OUTPUT_MODEL / f"efficientnet_head.keras"
 )
 
 callbacks_head = [
@@ -204,7 +194,7 @@ callbacks_head = [
         min_lr=1e-6,
     ),
     tf.keras.callbacks.CSVLogger(
-        OUTPUT_MODEL / f"local_resnet50_head.csv"
+        OUTPUT_MODEL / f"efficientnetb4_head.csv"
     ),
 ]
 
@@ -252,4 +242,3 @@ plt.legend()
 plt.grid(True)
 plt.savefig(OUTPUT_PLOT / f"head only - val_auc and auc - {LOCAL_HEIGHT}x{LOCAL_WIDTH} - seed {SEED}.png", dpi=300, bbox_inches="tight")
 plt.close()
-

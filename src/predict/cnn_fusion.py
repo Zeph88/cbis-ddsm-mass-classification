@@ -3,8 +3,11 @@ from src.config import OUTPUT_NPY, OUTPUT_MODEL
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 from src.training.dataset_preparation import train_val_test_sets
+from src.functions import ensure_directory
 import numpy as np
 import tensorflow as tf
+
+ensure_directory(OUTPUT_MODEL)
 
 param_inputs = {
     'zoom':{

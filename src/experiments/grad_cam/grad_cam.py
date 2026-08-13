@@ -4,6 +4,7 @@
 import os
 from src.preprocessing.dataset_preprocessing import tensor_to_2d_np, orient_by_breast_mass, crop_zoom_to_roi
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_NPY, PIXELS_H, PIXELS_W, OUTPUT_MODEL
+from src.functions import set_seed, ensure_directory
 
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
@@ -17,6 +18,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
 
+
+ensure_directory(OUTPUT_MODEL)
 
 zoom_to_roi=True
 

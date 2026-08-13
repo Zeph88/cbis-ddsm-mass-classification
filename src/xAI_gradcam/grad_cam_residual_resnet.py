@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
+from src.functions import ensure_directory
+
 from src.config import (
     OUTPUT_MODEL,
     OUTPUT_NPY,
@@ -30,6 +32,9 @@ from src.preprocessing.dataset_preprocessing import (
 # ======================================================================
 # Configuration
 # ======================================================================
+
+ensure_directory(OUTPUT_MODEL)
+ensure_directory(OUTPUT_PLOT)
 
 # Adjust this path only if the residual checkpoint uses another filename.
 RESIDUAL_MODEL_PATH = (

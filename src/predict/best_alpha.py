@@ -6,6 +6,7 @@ from sklearn.metrics import roc_auc_score
 from src.training.dataset_preparation import train_val_test_sets
 
 from src.config import OUTPUT_MODEL, OUTPUT_NPY
+from src.functions import ensure_directory
 
 def collect_branch_predictions(
     dataset,
@@ -45,6 +46,8 @@ def collect_branch_predictions(
         np.asarray(local_probabilities),
         np.asarray(global_probabilities),
     )
+
+ensure_directory(OUTPUT_MODEL)
 
 param_inputs = {
     'zoom':{

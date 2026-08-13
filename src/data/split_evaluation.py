@@ -4,17 +4,19 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from src.config import OUTPUT_NPY, OUTPUT_PLOT
+from src.config import OUTPUT_PLOT, SPLITS_DIR
+from src.functions import ensure_directory
 
+ensure_directory(OUTPUT_PLOT)
 
 # ------------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------------
 
 SPLIT_FILES = {
-    "Train": OUTPUT_NPY / "train_split.csv",
-    "Validation": OUTPUT_NPY / "val_split.csv",
-    "Test": OUTPUT_NPY / "test_split.csv",
+    "Train": SPLITS_DIR / "train_split.csv",
+    "Validation": SPLITS_DIR / "val_split.csv",
+    "Test": SPLITS_DIR / "test_split.csv",
 }
 
 OUTPUT_DIR = OUTPUT_PLOT / "dataset_distribution"

@@ -3,7 +3,7 @@ import pathlib
 from pathlib import Path
 import pandas as pd 
 import numpy as np 
-from src.functions import set_seed
+from src.functions import set_seed, check_path
 from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT, DATASET_INDEX, SEED
 import pydicom
 

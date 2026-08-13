@@ -34,7 +34,7 @@ data/external/
 
 # Models
 /src/plots/
-models/
+/src/models/
 *.pt
 *.pth
 *.ckpt

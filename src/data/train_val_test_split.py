@@ -4,9 +4,9 @@ import pandas as pd
 from sklearn.model_selection import StratifiedGroupKFold
 
 from src.config import (
-    OUTPUT_NPY,
     SEED,
     DATASET_INDEX,
+    SPLITS_DIR
 )
 
 
@@ -507,15 +507,15 @@ if (
     and val_test_overlap == 0
 ):
     train_path = (
-        OUTPUT_NPY / "train_split.csv"
+        SPLITS_DIR / "train_split.csv"
     )
 
     val_path = (
-        OUTPUT_NPY / "val_split.csv"
+        SPLITS_DIR / "val_split.csv"
     )
 
     test_path = (
-        OUTPUT_NPY / "test_split.csv"
+        SPLITS_DIR / "test_split.csv"
     )
 
     train_df.to_csv(

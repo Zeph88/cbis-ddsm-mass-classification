@@ -1,6 +1,6 @@
 from pathlib import Path
 import pandas as pd
-from src.config import OUTPUT_NPY
+from src.config import SPLITS_DIR
 
 
 # ------------------------------------------------------------------
@@ -196,12 +196,12 @@ global_splits = {}
 
 for split_name, filenames in SPLIT_FILES.items():
     input_path = (
-        OUTPUT_NPY
+        SPLITS_DIR
         / filenames["input"]
     )
 
     output_path = (
-        OUTPUT_NPY
+        SPLITS_DIR
         / filenames["output"]
     )
 

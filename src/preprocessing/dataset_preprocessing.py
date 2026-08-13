@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 
 from src.preprocessing.dicom_handling import read_dicom_as_array, crop_image, resize_with_padding, remove_annotations, fix_border, tensor_to_2d_np, crop_breast_to_target_ratio
-from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_NPY, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH, CROP_SIZE
+from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_NPY, SPLITS_DIR, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH, CROP_SIZE
 
 
 def clear_directory(directory_path: Union[str, Path]) -> list:
@@ -468,9 +468,9 @@ if __name__ == "__main__":
     else:
         add_path = ""
 
-    train_df = pd.read_csv(OUTPUT_NPY / f"train_split{add_path}.csv")
-    val_df = pd.read_csv(OUTPUT_NPY / f"val_split{add_path}.csv")
-    test_df = pd.read_csv(OUTPUT_NPY / f"test_split{add_path}.csv")
+    train_df = pd.read_csv(SPLITS_DIR / f"train_split{add_path}.csv")
+    val_df = pd.read_csv(SPLITS_DIR / f"val_split{add_path}.csv")
+    test_df = pd.read_csv(SPLITS_DIR / f"test_split{add_path}.csv")
 
     train_df["set"] = "train"
     val_df["set"] = "validation"

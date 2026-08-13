@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.metrics import roc_auc_score
-from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT, OUTPUT_NPY, BATCH_SIZE, SEED
+from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT, BATCH_SIZE, SEED
 
 def cnn_predict(model, test_dataset):
     y_true = []

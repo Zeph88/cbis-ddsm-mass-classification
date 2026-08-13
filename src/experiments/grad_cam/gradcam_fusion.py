@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from src.config import OUTPUT_NPY, OUTPUT_MODEL
+from src.functions import ensure_directory
 
+ensure_directory(OUTPUT_MODEL)
 
 param_inputs = {
     "zoom": {

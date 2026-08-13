@@ -20,7 +20,7 @@ from src.config import (
     SEED,
 )
 
-from src.functions import set_seed
+from src.functions import set_seed, ensure_directory
 
 from src.training.dataset_preparation import (
     train_val_test_sets,
@@ -35,6 +35,8 @@ from src.training.threshold_selection import (
     threshold_grid_search,
 )
 
+ensure_directory(OUTPUT_MODEL)
+ensure_directory(OUTPUT_PLOT)
 
 # ======================================================================
 # Configuration

@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 SEED = 42
 BATCH_SIZE = 16
@@ -33,3 +34,4 @@ TRAIN_CSV = METADATA_DIR / "mass_case_description_train_set.csv"
 TEST_CSV = METADATA_DIR / "mass_case_description_test_set.csv"
 
 DATASET_INDEX = PROCESSED_DIR / "mass_dataset_index.csv"
+SPLITS_DIR = DATA_ROOT / "train_val_test_splits"
