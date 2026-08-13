@@ -6,14 +6,14 @@ import matplotlib.pyplot as plt
 from src.training.cnn_evaluation import cnn_predict, evaluate_thresholds
 from src.training.dataset_preparation import cnn_steps, train_val_test_sets
 from src.functions import set_seed
-from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, PIXELS_H, PIXELS_W, OUTPUT_PLOT
+from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, GLOBAL_HEIGHT, GLOBAL_WIDTH, OUTPUT_PLOT
 import math
 import gc
 
 tf.keras.backend.clear_session()
 set_seed(SEED)
 
-resolution=(PIXELS_H, PIXELS_W)
+resolution=(GLOBAL_HEIGHT, GLOBAL_WIDTH)
 
 file_path = f"full_{resolution[0]}x{resolution[1]}"
 
@@ -39,7 +39,7 @@ gc.collect()
 train_steps, val_steps, test_steps = cnn_steps(df)
 
 def build_resnet50_transfer(
-    input_shape=(PIXELS_H, PIXELS_W, 1),
+    input_shape=(GLOBAL_HEIGHT, GLOBAL_WIDTH, 1),
     dropout_rate=0.5,
 ):
     inputs = tf.keras.Input(
@@ -142,7 +142,7 @@ def build_resnet50_transfer(
     return model, base_model
 
 model, base_model = build_resnet50_transfer(
-    input_shape=(PIXELS_H, PIXELS_W, 1),
+    input_shape=(GLOBAL_HEIGHT, GLOBAL_WIDTH, 1),
     dropout_rate=0.5,
 )
 
@@ -312,7 +312,7 @@ plt.savefig(
     OUTPUT_PLOT
     / (
         "global head only - val_loss and loss - "
-        f"{PIXELS_H}x{PIXELS_W} - seed {SEED}.png"
+        f"{GLOBAL_HEIGHT}x{GLOBAL_WIDTH} - seed {SEED}.png"
     ),
     dpi=300,
     bbox_inches="tight",
@@ -345,7 +345,7 @@ plt.savefig(
     OUTPUT_PLOT
     / (
         "global head only - val_auc and auc - "
-        f"{PIXELS_H}x{PIXELS_W} - seed {SEED}.png"
+        f"{GLOBAL_HEIGHT}x{GLOBAL_WIDTH} - seed {SEED}.png"
     ),
     dpi=300,
     bbox_inches="tight",

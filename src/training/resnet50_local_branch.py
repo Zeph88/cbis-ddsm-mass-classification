@@ -6,13 +6,13 @@ import matplotlib.pyplot as plt
 from src.training.cnn_evaluation import cnn_predict, evaluate_thresholds
 from src.training.dataset_preparation import cnn_steps, train_val_test_sets
 from src.functions import set_seed
-from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, PIXELS_H, PIXELS_W, OUTPUT_PLOT
+from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_PLOT
 import math
 
 set_seed(SEED)
 
 zoom_to_roi=True
-resolution=(PIXELS_H, PIXELS_W)
+resolution=(LOCAL_HEIGHT, LOCAL_WIDTH)
 
 
 if zoom_to_roi:
@@ -33,7 +33,7 @@ train_steps, val_steps, test_steps = cnn_steps(df)
 
 
 def build_resnet50_transfer(
-    input_shape=(PIXELS_H, PIXELS_W, 1),
+    input_shape=(LOCAL_HEIGHT, LOCAL_WIDTH, 1),
     dropout_rate=0.5,
 ):
     inputs = tf.keras.Input(
@@ -122,7 +122,7 @@ def build_resnet50_transfer(
     return model, base_model
 
 model, base_model = build_resnet50_transfer(
-    input_shape=(PIXELS_H, PIXELS_W, 1),
+    input_shape=(LOCAL_HEIGHT, LOCAL_WIDTH, 1),
     dropout_rate=0.5,
 )
 
@@ -233,7 +233,7 @@ plt.ylabel("Binary cross-entropy")
 plt.title("Training and validation loss")
 plt.legend()
 plt.grid(True)
-plt.savefig(OUTPUT_PLOT / f"head only - val_loss and loss - {PIXELS_H}x{PIXELS_W} - seed {SEED}.png", dpi=300, bbox_inches="tight")
+plt.savefig(OUTPUT_PLOT / f"head only - val_loss and loss - {LOCAL_HEIGHT}x{LOCAL_WIDTH} - seed {SEED}.png", dpi=300, bbox_inches="tight")
 plt.close()
 
 # AUC plot
@@ -247,6 +247,6 @@ plt.ylabel("AUC")
 plt.title("Training and validation AUC")
 plt.legend()
 plt.grid(True)
-plt.savefig(OUTPUT_PLOT / f"head only - val_auc and auc - {PIXELS_H}x{PIXELS_W} - seed {SEED}.png", dpi=300, bbox_inches="tight")
+plt.savefig(OUTPUT_PLOT / f"head only - val_auc and auc - {LOCAL_HEIGHT}x{LOCAL_WIDTH} - seed {SEED}.png", dpi=300, bbox_inches="tight")
 plt.close()
 

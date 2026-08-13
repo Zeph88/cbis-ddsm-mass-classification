@@ -17,8 +17,8 @@ env/
 .vscode/
 
 # Debug
-/src/debug_outputs/
-/src/notebooks/
+/debug_outputs/
+/notebooks/
 
 # Data
 datasets/

@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 
 from src.preprocessing.dicom_handling import read_dicom_as_array, crop_image, resize_with_padding, remove_annotations, fix_border, tensor_to_2d_np, crop_breast_to_target_ratio
-from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_NPY, PIXELS_H, PIXELS_W, CROP_SIZE
+from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_NPY, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH, CROP_SIZE
 
 
 def clear_directory(directory_path: Union[str, Path]) -> list:
@@ -406,7 +406,7 @@ def preprocess_images(
             # Crop image to remove white borders and excessive padding, which could create noise
             treated_image =  crop_breast_to_target_ratio(
                 breast_crop,
-                target_size=(PIXELS_H, PIXELS_W),
+                target_size=(resolution[0], resolution[1]),
                 threshold_ratio=0.01,
                 margin_ratio=0.03,
             )
@@ -486,5 +486,8 @@ if __name__ == "__main__":
 
     crop_run = False
 
-    preprocess_images(df, zoom_to_roi=crop_run, resolution=(PIXELS_H, PIXELS_W))
+    if crop_run:
+        preprocess_images(df, zoom_to_roi=crop_run, resolution=(LOCAL_HEIGHT, LOCAL_WIDTH))
+    else:
+        preprocess_images(df, zoom_to_roi=crop_run, resolution=(GLOBAL_HEIGHT, GLOBAL_WIDTH))
     

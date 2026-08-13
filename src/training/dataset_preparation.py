@@ -89,18 +89,3 @@ def cnn_steps(data):
 
     return train_steps, val_steps, test_steps
 
-def main():
-    train_ds = build_tf_dataset(
-        DATASET_INDEX,
-        IMAGES_ROOT,
-        source="train",
-        batch_size=BATCH_SIZE,
-        shuffle=True
-    )
-
-    images, labels = next(iter(train_ds))
-
-    return images, labels
-
-if __name__ == "__main__":
-    main()
