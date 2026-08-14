@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import argparse
 
 from src.functions import ensure_directory
 
@@ -35,6 +36,27 @@ from src.preprocessing.dataset_preprocessing import (
 
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
+
+
+parser = argparse.ArgumentParser(
+    description="Apply GradCam to mammograms leveraging the residual ResNet50 fusion model."
+)
+
+parser.add_argument(
+    "--idx",
+    type=int,
+    required=True,
+    help="Enter the index of the mammogram to be analyzed."
+)
+
+parser.add_argument(
+    "--target_class",
+    type=bool,
+    required=True,
+    help="Enter the target class to be analyzed."
+)
+
+args = parser.parse_args()
 
 # Adjust this path only if the residual checkpoint uses another filename.
 RESIDUAL_MODEL_PATH = (
@@ -66,11 +88,11 @@ MAMMOGRAM_KEY = [
 ]
 
 # Index within the paired test dataframe.
-SAMPLE_INDEX = 100
+SAMPLE_INDEX = args.idx
 
 # "predicted" explains the model's predicted class.
 # Use 1 to explain malignant evidence or 0 to explain benign evidence.
-TARGET_CLASS = 1
+TARGET_CLASS = args.target_class
 
 DECISION_THRESHOLD = 0.265
 HEATMAP_ALPHA = 0.35

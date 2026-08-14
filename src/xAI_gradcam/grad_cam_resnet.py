@@ -10,6 +10,7 @@ import pandas as pd
 import tensorflow as tf
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import argparse
 
 from src.functions import ensure_directory
 
@@ -17,8 +18,10 @@ from src.config import (
     OUTPUT_NPY,
     OUTPUT_MODEL,
     OUTPUT_PLOT,
-    PIXELS_H,
-    PIXELS_W,
+    LOCAL_HEIGHT,
+    LOCAL_WIDTH,
+    GLOBAL_HEIGHT,
+    GLOBAL_WIDTH,
 )
 
 
@@ -29,12 +32,31 @@ from src.config import (
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
 
-zoom_to_roi = True
+parser = argparse.ArgumentParser(
+    description="Preprocess CBIS-DDSM images for the local or global branch."
+)
 
-if zoom_to_roi:
-    image_type = f"zoom_384x384"
+parser.add_argument(
+    "--mode",
+    choices=["local", "global"],
+    required=True,
+    help="Preprocessing mode: 'local' for ROI-centred crops, "
+            "'global' for full mammograms."
+)
+
+parser.add_argument(
+    "--idx",
+    type=int,
+    required=True,
+    help="Enter the index of the mammogram to be analyzed."
+)
+
+args = parser.parse_args()
+
+if args.mode == "local":
+    image_type = f"zoom_{LOCAL_HEIGHT}x{LOCAL_WIDTH}"
 else:
-    image_type = f"full_{PIXELS_H}x{PIXELS_W}"
+    image_type = f"full_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}"
 
 print(f"dataset_index_{image_type}.csv")
 
@@ -57,7 +79,7 @@ else:
     sample_df = df.reset_index(drop=True)
 
 
-idx = 35
+idx = args.idx
 
 # iloc avoids relying on the dataframe index labels.
 row = sample_df.iloc[idx]

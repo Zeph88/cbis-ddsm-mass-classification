@@ -258,15 +258,26 @@ Plots are written to `src/plots/`. This directory is created automatically when 
 
 ## Interpretability
 
-Grad-CAM is used to inspect spatial evidence contributing to local and global predictions.
+Grad-CAM is used to inspect the spatial regions contributing to model predictions.
 
-The final residual-fusion implementation is available in:
+For the individual local and global branches, Grad-CAM can be generated for a selected mammogram using:
 
 ```bash
-python -m src.xAI_gradcam.grad_cam_residual_resnet
+python -m src.xAI_gradcam.grad_cam_resnet --mode local --idx <index>
+python -m src.xAI_gradcam.grad_cam_resnet --mode global --idx <index>
 ```
 
-Grad-CAM outputs are treated as qualitative interpretability evidence and not as proof that the model relies on clinically meaningful features.
+For the final residual local-global fusion model, Grad-CAM can be generated with:
+
+```bash
+python -m src.xAI_gradcam.grad_cam_residual_resnet --idx <index> --target_class <0_or_1>
+```
+
+The --idx argument selects the sample to analyse. For the single-branch Grad-CAM script, --mode determines whether the ROI-centred local representation or the full-mammogram global representation is analysed.
+
+For the residual-fusion model, --target_class specifies the class for which the Grad-CAM activation maps are generated.
+
+Grad-CAM outputs are treated as qualitative interpretability evidence. They indicate spatial regions associated with the model prediction but do not demonstrate that the model relies on clinically meaningful or causal features.
 
 ## Installation
 
