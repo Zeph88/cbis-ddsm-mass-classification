@@ -23,7 +23,6 @@ IMAGES_ROOT = Path(
 )
 
 SRC_ROOT = PROJECT_ROOT / "src"
-MODEL_ROOT = SRC_ROOT / "models"
 METADATA_DIR = DATA_ROOT / "metadata"
 PROCESSED_DIR = DATA_ROOT / "processed"
 OUTPUT_NPY = DATA_ROOT / "preprocessed"
