@@ -6,9 +6,12 @@ os.environ["KERAS_BACKEND"] = "tensorflow"
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 from sklearn.metrics import (
     average_precision_score,
+    confusion_matrix,
+    ConfusionMatrixDisplay,
     log_loss,
     roc_auc_score,
 )
@@ -16,6 +19,7 @@ from sklearn.metrics import (
 from src.config import (
     OUTPUT_MODEL,
     OUTPUT_NPY,
+    OUTPUT_PLOT,
     SEED,
 )
 
@@ -31,6 +35,9 @@ from src.training.dataset_preparation import (
 # ======================================================================
 
 ensure_directory(OUTPUT_MODEL)
+ensure_directory(OUTPUT_PLOT)
+
+RETAINED_THRESHOLD = 0.265
 
 # Available values:
 #   "local"
@@ -71,6 +78,7 @@ MODEL_PATHS = {
 
 
 THRESHOLDS = [
+    RETAINED_THRESHOLD,
     0.35,
     0.40,
     0.45,
@@ -881,17 +889,100 @@ for threshold in THRESHOLDS:
         else 0.0
     )
 
+    specificity = (
+        tn / (tn + fp)
+        if tn + fp
+        else 0.0
+    )
+
     accuracy = (
         (tp + tn) / len(y_true)
     )
 
-    print(
-        f"threshold: {threshold:.2f}, "
-        f"accuracy: {accuracy}, "
-        f"precision: {precision}, "
-        f"recall: {recall}"
+    f1 = (
+        2 * precision * recall
+        / (precision + recall)
+        if precision + recall
+        else 0.0
     )
 
+    balanced_accuracy = (
+        recall + specificity
+    ) / 2
+
+    print(
+        f"threshold: {threshold:.3f}, "
+        f"accuracy: {accuracy:.4f}, "
+        f"precision: {precision:.4f}, "
+        f"recall: {recall:.4f}, "
+        f"specificity: {specificity:.4f}, "
+        f"f1: {f1:.4f}, "
+        f"balanced_accuracy: {balanced_accuracy:.4f}, "
+        f"TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}"
+    )
+
+# ======================================================================
+# Confusion matrix at the retained threshold
+# ======================================================================
+
+y_pred_retained = (
+    y_prob >= RETAINED_THRESHOLD
+).astype(np.int32)
+
+cm = confusion_matrix(
+    y_true,
+    y_pred_retained,
+    labels=[0, 1],
+)
+
+display = ConfusionMatrixDisplay(
+    confusion_matrix=cm,
+    display_labels=[
+        "Benign",
+        "Malignant",
+    ],
+)
+
+fig, ax = plt.subplots(
+    figsize=(5, 5)
+)
+
+display.plot(
+    ax=ax,
+    values_format="d",
+    colorbar=False,
+)
+
+ax.set_title(
+    f"Confusion Matrix – Test Set\n"
+    f"Threshold = {RETAINED_THRESHOLD:.3f}"
+)
+
+fig.tight_layout()
+
+confusion_matrix_path = (
+    OUTPUT_PLOT
+    / (
+        f"confusion_matrix_{BRANCH}_"
+        f"{EVALUATION_SCOPE}_"
+        f"seed_{SEED}.png"
+    )
+)
+
+fig.savefig(
+    confusion_matrix_path,
+    dpi=300,
+    bbox_inches="tight",
+)
+
+plt.close(fig)
+
+print(
+    "\nConfusion matrix saved to:"
+)
+print(
+    confusion_matrix_path
+)
 
 # ======================================================================
 # Save predictions
