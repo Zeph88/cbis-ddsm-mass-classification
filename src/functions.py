@@ -1,17 +1,11 @@
 import os
 from pathlib import Path
-import pandas as pd
 import numpy as np
-import pydicom
-from sklearn.metrics import roc_auc_score
-from pydicom.data import get_testdata_files
-from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT, BATCH_SIZE, SEED
-from src.training.dataset_preparation import build_tf_dataset
+from src.config import SEED
 import random
 import tensorflow as tf
-import math
 
-def set_seed(seed=42):
+def set_seed(seed=SEED):
     os.environ["PYTHONHASHSEED"] = str(seed)
 
     random.seed(seed)

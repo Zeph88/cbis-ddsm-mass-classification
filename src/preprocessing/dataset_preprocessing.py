@@ -461,12 +461,12 @@ def add_sample_id(df):
 
 if __name__ == "__main__":
 
-    global_preprocessing = True
+    crop_run = False
 
-    if global_preprocessing:
-        add_path = "_global"
-    else:
+    if crop_run:
         add_path = ""
+    else:
+        add_path = "_global"
 
     train_df = pd.read_csv(SPLITS_DIR / f"train_split{add_path}.csv")
     val_df = pd.read_csv(SPLITS_DIR / f"val_split{add_path}.csv")
@@ -483,8 +483,6 @@ if __name__ == "__main__":
     )
 
     df = add_sample_id(df)
-
-    crop_run = False
 
     if crop_run:
         preprocess_images(df, zoom_to_roi=crop_run, resolution=(LOCAL_HEIGHT, LOCAL_WIDTH))

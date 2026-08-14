@@ -9,7 +9,6 @@ import tensorflow as tf
 import keras
 
 # Display 
-from IPython.display import Image, display
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
