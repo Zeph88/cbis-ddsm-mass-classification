@@ -208,7 +208,7 @@ plt.legend()
 plt.tight_layout()
 
 plt.savefig(
-    OUTPUT_MODEL
+    OUTPUT_PLOT
     / "probability_fusion_auc_by_alpha.png",
     dpi=300,
     bbox_inches="tight",

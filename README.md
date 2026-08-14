@@ -150,13 +150,36 @@ python -m src.data.split_evaluation
 
 ### 3. Preprocess the DICOM data
 
-Preprocessing converts the DICOM inputs into reusable `.npy` arrays. This is performed separately from training so that DICOM decoding and image preprocessing do not need to be repeated for every experiment.
+Preprocessing converts the CBIS-DDSM DICOM files into reusable `.npy` arrays. This step is performed separately from model training so that DICOM decoding and image preprocessing do not need to be repeated for every experiment.
 
-```bash
-python -m src.preprocessing.dataset_preprocessing
+By default, the pipeline expects the raw CBIS-DDSM dataset under:
+
+```text
+data/raw/cbis_ddsm/
 ```
 
-Generated arrays are stored under `data/preprocessed/` and are not version-controlled.
+If the dataset is stored elsewhere, define the CBIS_DDSM_ROOT environment variable before running the preprocessing step:
+
+```bash
+export CBIS_DDSM_ROOT="/path/to/cbis_ddsm"
+```
+
+Run the preprocessing separately for the local and global branches:
+
+```bash
+python -m src.preprocessing.dataset_preprocessing --mode local
+python -m src.preprocessing.dataset_preprocessing --mode global
+```
+
+The local mode generates ROI-centred lesion crops at 384 × 384, while the global mode preprocesses full mammograms at 768 × 512.
+
+Generated arrays are stored under:
+
+```text
+data/preprocessed/
+```
+
+These generated files are not version-controlled.
 
 ### Local representation
 

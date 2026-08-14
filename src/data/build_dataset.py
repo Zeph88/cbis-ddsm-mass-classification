@@ -109,6 +109,14 @@ def build_dataset_index():
 
 
 def main():
+
+    if not IMAGES_ROOT.exists():
+        raise FileNotFoundError(
+            f"CBIS-DDSM dataset not found at: {IMAGES_ROOT}\n"
+            "Place the dataset under 'data/raw/cbis_ddsm' "
+            "or set the CBIS_DDSM_ROOT environment variable."
+        )
+
     df = build_dataset_index()
 
     DATASET_INDEX.parent.mkdir(parents=True, exist_ok=True)

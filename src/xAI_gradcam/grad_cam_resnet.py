@@ -95,7 +95,7 @@ print("Input maximum:", array_npy.max())
 # ------------------------------------------------------------------
 
 model = tf.keras.models.load_model(
-    OUTPUT_MODEL / "resnet50_head.keras",
+    OUTPUT_MODEL / "local_resnet50_head.keras",
     compile=False,
 )
 

@@ -1,4 +1,4 @@
-from src.experiments.fusion_global_local import fusion_models
+from src.experiments.models.fusion_global_local import fusion_models
 from src.config import OUTPUT_NPY, OUTPUT_MODEL
 import pandas as pd
 from sklearn.metrics import roc_auc_score

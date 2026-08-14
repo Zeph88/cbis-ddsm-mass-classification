@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 from typing import Union, Callable
 import time
+import argparse
 
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -461,12 +462,28 @@ def add_sample_id(df):
 
 if __name__ == "__main__":
 
-    crop_run = False
+    parser = argparse.ArgumentParser(
+        description="Preprocess CBIS-DDSM images for the local or global branch."
+    )
 
-    if crop_run:
+    parser.add_argument(
+        "--mode",
+        choices=["local", "global"],
+        required=True,
+        help="Preprocessing mode: 'local' for ROI-centred crops, "
+             "'global' for full mammograms."
+    )
+
+    args = parser.parse_args()
+
+    if args.mode == "local":
         add_path = ""
+        zoom_to_roi = True
+        resolution = (LOCAL_HEIGHT, LOCAL_WIDTH)
     else:
         add_path = "_global"
+        zoom_to_roi = False
+        resolution = (GLOBAL_HEIGHT, GLOBAL_WIDTH)
 
     train_df = pd.read_csv(SPLITS_DIR / f"train_split{add_path}.csv")
     val_df = pd.read_csv(SPLITS_DIR / f"val_split{add_path}.csv")
@@ -484,8 +501,10 @@ if __name__ == "__main__":
 
     df = add_sample_id(df)
 
-    if crop_run:
-        preprocess_images(df, zoom_to_roi=crop_run, resolution=(LOCAL_HEIGHT, LOCAL_WIDTH))
-    else:
-        preprocess_images(df, zoom_to_roi=crop_run, resolution=(GLOBAL_HEIGHT, GLOBAL_WIDTH))
+    print(
+        f"Running {args.mode} preprocessing "
+        f"with resolution {resolution}"
+    )
+
+    preprocess_images(df, zoom_to_roi=zoom_to_roi, resolution=resolution)
     
