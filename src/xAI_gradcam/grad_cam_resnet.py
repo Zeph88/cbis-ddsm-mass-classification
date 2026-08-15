@@ -24,6 +24,11 @@ from src.config import (
     GLOBAL_WIDTH,
 )
 
+from src.xAI_gradcam.gradcam_utils import (
+    build_resnet_feature_model,
+    make_branch_gradcam_heatmap
+)
+
 
 # ------------------------------------------------------------------
 # Configuration
@@ -33,7 +38,7 @@ ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
 
 parser = argparse.ArgumentParser(
-    description="Preprocess CBIS-DDSM images for the local or global branch."
+    description="Generate Grad-CAM visualisations for the local or global ResNet50 branch."
 )
 
 parser.add_argument(
@@ -51,12 +56,39 @@ parser.add_argument(
     help="Enter the index of the mammogram to be analyzed."
 )
 
+parser.add_argument(
+    "--target_class",
+    choices=[
+        "predicted",
+        "0",
+        "1",
+    ],
+    default="predicted",
+    help=(
+        "Class to explain: 'predicted', "
+        "'0' for benign, or '1' for malignant."
+    ),
+)
+
 args = parser.parse_args()
 
 if args.mode == "local":
-    image_type = f"zoom_{LOCAL_HEIGHT}x{LOCAL_WIDTH}"
+    image_type = (
+        f"zoom_{LOCAL_HEIGHT}x{LOCAL_WIDTH}"
+    )
+    model_path = (
+        OUTPUT_MODEL
+        / "local_resnet50_head.keras"
+    )
+
 else:
-    image_type = f"full_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}"
+    image_type = (
+        f"full_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}"
+    )
+    model_path = (
+        OUTPUT_MODEL
+        / "global_resnet50_head.keras"
+    )
 
 print(f"dataset_index_{image_type}.csv")
 
@@ -100,7 +132,7 @@ if array_npy.ndim == 2:
 
 if array_npy.ndim != 3 or array_npy.shape[-1] != 1:
     raise ValueError(
-        "Expected one local mammogram with shape (H, W, 1), "
+        "Expected one mammogram with shape (H, W, 1), "
         f"but received {array_npy.shape}."
     )
 
@@ -117,7 +149,7 @@ print("Input maximum:", array_npy.max())
 # ------------------------------------------------------------------
 
 model = tf.keras.models.load_model(
-    OUTPUT_MODEL / "local_resnet50_head.keras",
+    model_path,
     compile=False,
 )
 
@@ -131,86 +163,26 @@ model.summary()
 
 
 # ------------------------------------------------------------------
-# Find the nested ResNet50 backbone
+# Build ResNet50 feature-map extractor
 # ------------------------------------------------------------------
 
-# >>> ADDED
-# ResNet50 is a nested Keras model inside the complete local model.
-resnet_candidates = [
-    layer
-    for layer in model.layers
-    if (
-        isinstance(layer, tf.keras.Model)
-        and "resnet50" in layer.name.lower()
+feature_model, resnet_backbone = (
+    build_resnet_feature_model(
+        branch_model=model,
+        model_name=(
+            f"{args.mode}_resnet50_feature_model"
+        ),
     )
-]
-
-if len(resnet_candidates) != 1:
-    raise ValueError(
-        "Could not identify exactly one nested ResNet50 backbone. "
-        f"Candidates found: {[layer.name for layer in resnet_candidates]}"
-    )
-
-resnet_backbone = resnet_candidates[0]
-
-print("ResNet50 backbone:", resnet_backbone.name)
-print("ResNet50 output shape:", resnet_backbone.output_shape)
-
-# ------------------------------------------------------------------
-# Reconstruct preprocessing up to the ResNet output
-# ------------------------------------------------------------------
-
-# Construct a model that produces the ResNet feature maps from the
-# original one-channel mammogram input.
-gradcam_input = tf.keras.Input(
-    shape=model.input_shape[1:],
-    name="gradcam_input",
 )
 
-x = gradcam_input
-
-# Apply augmentation only if it exists in the saved model.
-augmentation_layers = [
-    layer
-    for layer in model.layers
-    if layer.name == "data_augmentation"
-]
-
-if augmentation_layers:
-    x = augmentation_layers[0](
-        x,
-        training=False,
-    )
-
-
-# Reuse the saved preprocessing layers.
-grayscale_to_rgb = model.get_layer(
-    "grayscale_to_rgb"
+print(
+    "ResNet50 backbone:",
+    resnet_backbone.name,
 )
 
-restore_255_scale = model.get_layer(
-    "restore_255_scale"
-)
-
-x = grayscale_to_rgb(
-    [x, x, x]
-)
-
-x = restore_255_scale(x)
-
-x = tf.keras.applications.resnet50.preprocess_input(x)
-
-
-# ResNet50 include_top=False ends with conv5_block3_out.
-feature_maps = resnet_backbone(
-    x,
-    training=False,
-)
-
-feature_model = tf.keras.Model(
-    inputs=gradcam_input,
-    outputs=feature_maps,
-    name="local_resnet50_feature_model",
+print(
+    "ResNet50 output shape:",
+    resnet_backbone.output_shape,
 )
 
 
@@ -245,7 +217,7 @@ head_layers = model.layers[
 ]
 
 print(
-    "Local head layers:",
+    f"{args.mode.capitalize()} Head layers:",
     [layer.name for layer in head_layers],
 )
 
@@ -254,114 +226,10 @@ print(
     output_layer.name,
 )
 
-
-# ------------------------------------------------------------------
-# Grad-CAM
-# ------------------------------------------------------------------
-
-def make_gradcam_heatmap(
-    img_array,
-    feature_model,
-    head_layers,
-    output_layer,
-):
-    """
-    Generate a Grad-CAM heatmap from the final ResNet50 feature maps.
-
-    The gradient is computed from the pre-sigmoid malignancy logit
-    rather than the probability to reduce sigmoid saturation.
-    """
-
-    with tf.GradientTape() as tape:
-        # Extract the final convolutional feature maps.
-        conv_outputs = feature_model(
-            img_array,
-            training=False,
-        )
-
-        # Explicitly watch the feature maps because the backbone is frozen.
-        tape.watch(conv_outputs)
-
-        x = conv_outputs
-
-        # Apply the already-trained local classification head.
-        for layer in head_layers:
-            x = layer(
-                x,
-                training=False,
-            )
-
-        # >>> ADDED
-        # Compute the pre-sigmoid logit manually.
-        logits = tf.linalg.matmul(
-            x,
-            output_layer.kernel,
-        )
-
-        if output_layer.use_bias:
-            logits = tf.nn.bias_add(
-                logits,
-                output_layer.bias,
-            )
-
-        malignancy_logit = logits[:, 0]
-
-    grads = tape.gradient(
-        malignancy_logit,
-        conv_outputs,
-    )
-
-    if grads is None:
-        raise RuntimeError(
-            "Gradients are None. Check the reconstructed feature "
-            "and classification paths."
-        )
-
-    print("Conv outputs:", conv_outputs.shape)
-    print("Gradients:", grads.shape)
-    print(
-        "Malignancy logit:",
-        malignancy_logit.numpy(),
-    )
-
-    # Average each channel gradient across spatial positions.
-    pooled_grads = tf.reduce_mean(
-        grads,
-        axis=(0, 1, 2),
-    )
-
-    # Remove the batch dimension.
-    conv_outputs = conv_outputs[0]
-
-    # Weight each feature map by its mean gradient.
-    heatmap = tf.reduce_sum(
-        conv_outputs * pooled_grads,
-        axis=-1,
-    )
-
-    # Keep only positive contributions to the malignant prediction.
-    heatmap = tf.maximum(
-        heatmap,
-        0,
-    )
-
-    maximum = tf.reduce_max(heatmap)
-
-    # Avoid division by zero for an empty heatmap.
-    heatmap = tf.where(
-        maximum > 0,
-        heatmap / maximum,
-        tf.zeros_like(heatmap),
-    )
-
-    return heatmap.numpy()
-
-
 # ------------------------------------------------------------------
 # Prediction
 # ------------------------------------------------------------------
 
-# >>> CHANGED
 # Calling the model directly avoids the extra predict pipeline.
 prob = float(
     model(
@@ -371,6 +239,19 @@ prob = float(
 )
 
 pred_label = int(prob >= 0.5)
+
+if args.target_class == "predicted":
+    target_class = pred_label
+else:
+    target_class = int(
+        args.target_class
+    )
+
+target_class_name = (
+    "MALIGNANT"
+    if target_class == 1
+    else "BENIGN"
+)
 
 true_class = (
     "MALIGNANT"
@@ -393,11 +274,12 @@ print("P(malignant):", prob)
 # Generate heatmap
 # ------------------------------------------------------------------
 
-heatmap = make_gradcam_heatmap(
+heatmap = make_branch_gradcam_heatmap(
     img_array=array_npy,
     feature_model=feature_model,
     head_layers=head_layers,
     output_layer=output_layer,
+    target_class=target_class,
 )
 
 
@@ -480,9 +362,10 @@ overlay = np.clip(
 # ------------------------------------------------------------------
 
 output_prefix = (
-    f"local_gradcam_idx_{idx}"
+    f"{args.mode}_gradcam_idx_{idx}"
     f"_true_{true_label}"
     f"_pred_{pred_label}"
+    f"_target_{target_class}"
 )
 
 
@@ -518,9 +401,10 @@ plt.imshow(
 )
 
 plt.title(
-    f"Local Grad-CAM | "
+    f"{args.mode.capitalize()} Grad-CAM | "
     f"True: {true_class} | "
     f"Pred: {pred_class}"
+    f"Target: {target_class_name}"
 )
 
 plt.axis("off")
@@ -545,7 +429,7 @@ plt.imshow(
 )
 
 plt.title(
-    f"Original local crop | "
+    f"Original {args.mode} image | "
     f"True: {true_class} | "
     f"Pred: {pred_class} | "
     f"P(malignant): {prob:.4f}"

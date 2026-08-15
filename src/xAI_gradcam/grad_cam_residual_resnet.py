@@ -1,7 +1,5 @@
 import gc
-import inspect
 import os
-from pathlib import Path
 
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
@@ -30,6 +28,16 @@ from src.preprocessing.dataset_preprocessing import (
     orient_by_breast_mass,
 )
 
+from src.xAI_gradcam.gradcam_utils import (
+    apply_layers_inference,
+    build_resnet_feature_model,
+    get_required_layer,
+    load_single_channel_image,
+    make_gradcam_heatmap,
+    prepare_image_for_display,
+    call_layer_inference,
+)
+
 # ======================================================================
 # Configuration
 # ======================================================================
@@ -51,9 +59,16 @@ parser.add_argument(
 
 parser.add_argument(
     "--target_class",
-    type=bool,
-    required=True,
-    help="Enter the target class to be analyzed."
+    choices=[
+        "predicted",
+        "0",
+        "1",
+    ],
+    default="predicted",
+    help=(
+        "Class to explain: 'predicted', "
+        "'0' for benign, or '1' for malignant."
+    ),
 )
 
 args = parser.parse_args()
@@ -119,150 +134,6 @@ GRADCAM_OUTPUT_DIR.mkdir(
 # Utility functions
 # ======================================================================
 
-
-def get_required_layer(model, layer_name):
-    """Return one named layer and raise a detailed error if absent."""
-
-    try:
-        return model.get_layer(layer_name)
-    except ValueError as exc:
-        raise ValueError(
-            f"Layer '{layer_name}' was not found in model "
-            f"'{model.name}'. Available layers:\n"
-            f"{[layer.name for layer in model.layers]}"
-        ) from exc
-
-
-
-def find_nested_resnet50(model):
-    """Find the single nested ResNet50 backbone in a branch extractor."""
-
-    candidates = [
-        layer
-        for layer in model.layers
-        if (
-            isinstance(layer, tf.keras.Model)
-            and "resnet50" in layer.name.lower()
-        )
-    ]
-
-    if len(candidates) != 1:
-        raise ValueError(
-            "Could not identify exactly one nested ResNet50 backbone "
-            f"inside '{model.name}'. Candidates: "
-            f"{[layer.name for layer in candidates]}"
-        )
-
-    return candidates[0]
-
-
-
-def call_layer_inference(layer, inputs):
-    """Call a reused Keras layer in inference mode when supported."""
-
-    call_parameters = inspect.signature(
-        layer.call
-    ).parameters
-
-    if "training" in call_parameters:
-        return layer(
-            inputs,
-            training=False,
-        )
-
-    return layer(inputs)
-
-
-
-def apply_layers_inference(inputs, layers):
-    """Apply a sequential list of existing layers in inference mode."""
-
-    x = inputs
-
-    for layer in layers:
-        x = call_layer_inference(
-            layer,
-            x,
-        )
-
-    return x
-
-
-
-def build_resnet_feature_model(
-    branch_extractor,
-    model_name,
-):
-    """
-    Reconstruct the branch preprocessing path and return the final
-    ResNet50 convolutional feature maps.
-    """
-
-    resnet_backbone = find_nested_resnet50(
-        branch_extractor
-    )
-
-    gradcam_input = tf.keras.Input(
-        shape=branch_extractor.input_shape[1:],
-        name=f"{model_name}_input",
-    )
-
-    x = gradcam_input
-
-    augmentation_layers = [
-        layer
-        for layer in branch_extractor.layers
-        if layer.name == "data_augmentation"
-    ]
-
-    if len(augmentation_layers) > 1:
-        raise ValueError(
-            f"Several data_augmentation layers were found in "
-            f"'{branch_extractor.name}'."
-        )
-
-    if augmentation_layers:
-        x = augmentation_layers[0](
-            x,
-            training=False,
-        )
-
-    grayscale_to_rgb = get_required_layer(
-        branch_extractor,
-        "grayscale_to_rgb",
-    )
-
-    restore_255_scale = get_required_layer(
-        branch_extractor,
-        "restore_255_scale",
-    )
-
-    # The saved models duplicate the single grayscale channel to RGB.
-    x = grayscale_to_rgb(
-        [x, x, x]
-    )
-
-    x = restore_255_scale(x)
-
-    x = tf.keras.applications.resnet50.preprocess_input(
-        x
-    )
-
-    feature_maps = resnet_backbone(
-        x,
-        training=False,
-    )
-
-    feature_model = tf.keras.Model(
-        inputs=gradcam_input,
-        outputs=feature_maps,
-        name=model_name,
-    )
-
-    return feature_model, resnet_backbone
-
-
-
 def get_layers_between(
     model,
     start_layer,
@@ -294,35 +165,6 @@ def get_layers_between(
     return model.layers[
         start_position + 1 : stop_position
     ]
-
-
-
-def load_single_channel_image(
-    image_path,
-    expected_shape,
-):
-    """Load one .npy mammogram and add its batch dimension."""
-
-    image = np.load(
-        image_path
-    ).astype(np.float32)
-
-    if image.ndim == 2:
-        image = image[..., np.newaxis]
-
-    if image.ndim != 3 or image.shape[-1] != 1:
-        raise ValueError(
-            "Expected a single-channel image with shape (H, W, 1), "
-            f"but received {image.shape} from '{image_path}'."
-        )
-
-    if tuple(image.shape) != tuple(expected_shape):
-        raise ValueError(
-            f"Image '{image_path}' has shape {image.shape}, but the "
-            f"model expects {expected_shape}."
-        )
-
-    return image[np.newaxis, ...]
 
 
 
@@ -456,84 +298,6 @@ def build_paired_test_dataframe(
     return paired_df.reset_index(
         drop=True
     )
-
-
-
-def make_gradcam_heatmap(
-    feature_maps,
-    gradients,
-):
-    """Convert final convolutional maps and gradients into Grad-CAM."""
-
-    if gradients is None:
-        raise RuntimeError(
-            "Gradients are None. Check that the final logit is connected "
-            "to the selected branch feature maps."
-        )
-
-    pooled_gradients = tf.reduce_mean(
-        gradients,
-        axis=(0, 1, 2),
-    )
-
-    feature_maps = feature_maps[0]
-
-    heatmap = tf.reduce_sum(
-        feature_maps * pooled_gradients,
-        axis=-1,
-    )
-
-    # Keep positive contributions toward the selected target class.
-    heatmap = tf.maximum(
-        heatmap,
-        0,
-    )
-
-    maximum = tf.reduce_max(
-        heatmap
-    )
-
-    heatmap = tf.where(
-        maximum > 0,
-        heatmap / maximum,
-        tf.zeros_like(heatmap),
-    )
-
-    return heatmap.numpy()
-
-
-
-def prepare_image_for_display(image_array):
-    """Convert one batched grayscale image to an RGB display array."""
-
-    image = image_array[
-        0,
-        ...,
-        0,
-    ].astype(np.float32)
-
-    minimum = image.min()
-    maximum = image.max()
-
-    if maximum > minimum:
-        image = (
-            image - minimum
-        ) / (
-            maximum - minimum
-        )
-    else:
-        image = np.zeros_like(
-            image
-        )
-
-    image_rgb = np.repeat(
-        image[..., np.newaxis],
-        repeats=3,
-        axis=-1,
-    )
-
-    return image, image_rgb
-
 
 
 def save_gradcam_figures(
@@ -1030,14 +794,22 @@ global_embedding_layer = get_required_layer(
     GLOBAL_EMBEDDING_LAYER_NAME,
 )
 
-local_feature_model, local_resnet = build_resnet_feature_model(
-    branch_extractor=local_extractor,
-    model_name="local_resnet50_gradcam_feature_model",
+local_feature_model, local_resnet = (
+    build_resnet_feature_model(
+        branch_model=local_extractor,
+        model_name=(
+            "local_resnet50_gradcam_feature_model"
+        ),
+    )
 )
 
-global_feature_model, global_resnet = build_resnet_feature_model(
-    branch_extractor=global_extractor,
-    model_name="global_resnet50_gradcam_feature_model",
+global_feature_model, global_resnet = (
+    build_resnet_feature_model(
+        branch_model=global_extractor,
+        model_name=(
+            "global_resnet50_gradcam_feature_model"
+        ),
+    )
 )
 
 local_head_to_embedding = get_layers_between(
@@ -1328,11 +1100,9 @@ predicted_label = int(
 
 if TARGET_CLASS == "predicted":
     target_class = predicted_label
-elif TARGET_CLASS in (0, 1):
-    target_class = int(TARGET_CLASS)
 else:
-    raise ValueError(
-        "TARGET_CLASS must be 'predicted', 0, or 1."
+    target_class = int(
+        TARGET_CLASS
     )
 
 with tf.GradientTape() as tape:

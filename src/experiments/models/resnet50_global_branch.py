@@ -9,10 +9,6 @@ from src.functions import set_seed, ensure_directory
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, GLOBAL_HEIGHT, GLOBAL_WIDTH, OUTPUT_PLOT
 import math
 import gc
-from src.modeling.global_resnet50 import (
-    build_global_model,
-)
-
 
 tf.keras.backend.clear_session()
 set_seed(SEED)
@@ -45,13 +41,112 @@ gc.collect()
 
 train_steps, val_steps, test_steps = cnn_steps(df)
 
-model = build_global_model(
-    input_shape=(
-        GLOBAL_HEIGHT,
-        GLOBAL_WIDTH,
-        1,
-    ),
-    seed=SEED,
+def build_resnet50_transfer(
+    input_shape=(GLOBAL_HEIGHT, GLOBAL_WIDTH, 1),
+    dropout_rate=0.5,
+):
+    inputs = tf.keras.Input(
+        shape=input_shape,
+        name="mammogram_input",
+    )
+
+    # data_augmentation = tf.keras.Sequential(
+    #     [
+    #         tf.keras.layers.RandomTranslation(
+    #             height_factor=0.01,
+    #             width_factor=0.01,
+    #             fill_mode="constant",
+    #             fill_value=0.0,
+    #             seed=SEED,
+    #             name="random_small_translation",
+    #         )
+    #     ],
+    #     name="data_augmentation",
+    # )
+
+    # x = data_augmentation(inputs)
+
+    # input passed 3 times
+    x = tf.keras.layers.Concatenate(
+        axis=-1,
+        name="grayscale_to_rgb",
+    )([inputs, inputs, inputs])
+
+    x = tf.keras.layers.Rescaling(
+        scale=255.0,
+        name="restore_255_scale",
+    )(x)
+
+    x = tf.keras.applications.resnet50.preprocess_input(x)
+
+    base_model = tf.keras.applications.ResNet50(
+        include_top=False,
+        weights="imagenet",
+        input_shape=(input_shape[0], input_shape[1], 3),
+    )
+
+    base_model.trainable = False
+
+    # training=False keeps BatchNormalization in inference mode
+    x = base_model(x, training=False)
+
+    x = tf.keras.layers.MaxPooling2D(
+        pool_size=(6, 6),
+        strides=(6, 6),
+        padding="same",
+        name="resnet_spatial_max_pooling",
+    )(x)
+
+    x = tf.keras.layers.Flatten(
+        name="resnet_global_flatten",
+    )(x)
+
+    x = tf.keras.layers.Dropout(
+        dropout_rate,
+        name="classification_dropout",
+    )(x)
+
+    # Solve dying ReLU issue
+    x = tf.keras.layers.Dense(
+        units=8,
+        activation=None,
+        use_bias=False,
+        # activation="relu",
+        kernel_regularizer=tf.keras.regularizers.l2(1e-4),
+        name="mammography_adapter",
+    )(x)
+
+    x = tf.keras.layers.BatchNormalization(
+        name="mammography_adapter_batch_norm"
+    )(x)
+
+    x = tf.keras.layers.ReLU(
+        name="mammography_adapter_relu",
+    )(x)
+
+    x = tf.keras.layers.Dropout(
+        rate=0.2,
+        name="embedding_dropout",
+    )(x)
+
+    outputs = tf.keras.layers.Dense(
+        units=1,
+        activation="sigmoid",
+        # kernel_regularizer=tf.keras.regularizers.l2(1e-5),
+        name="classification_output",
+    )(x)
+
+    model = tf.keras.Model(
+        inputs=inputs,
+        outputs=outputs,
+        name="global_resnet50_transfer",
+    )
+
+    return model, base_model
+
+model, base_model = build_resnet50_transfer(
+    input_shape=(GLOBAL_HEIGHT, GLOBAL_WIDTH, 1),
+    dropout_rate=0.5,
 )
 
 model.compile(
@@ -149,6 +244,7 @@ history_values = {
 del history_head
 del callbacks_head
 del model
+del base_model
 
 del train_ds
 del val_ds
