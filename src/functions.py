@@ -1,9 +1,10 @@
 import os
 from pathlib import Path
 import numpy as np
-from src.config import SEED
+from src.config import SEED, SPLITS_DIR
 import random
 import tensorflow as tf
+import pandas as pd
 
 def set_seed(seed=SEED):
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -36,3 +37,11 @@ def check_path(val, images_root):
 def ensure_directory(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+def load_data(*paths):
+    files = []
+    for path in paths:
+        files.append(pd.read_csv(path))
+        if not path.exists():
+            raise FileNotFoundError(f"Missing global index: {path}")
+    return files

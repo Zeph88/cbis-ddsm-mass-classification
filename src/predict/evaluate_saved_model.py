@@ -19,6 +19,7 @@ from sklearn.metrics import (
 from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY
 
 from src.functions import set_seed, ensure_directory
+from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
 
 from src.training.dataset_preparation import (
     train_val_test_sets,
@@ -719,209 +720,38 @@ for images, labels in test_ds_eval.take(1):
         labels.shape,
     )
 
+# Inference
+y_true, y_prob = collect_binary_predictions(model=model, dataset=test_ds_eval, input_selector=select_model_input)
+metrics = calculate_metrics(y_true, y_prob)
 
-# ======================================================================
-# Test inference
-# ======================================================================
-
-y_true = []
-y_prob = []
-
-print(
-    f"\nRunning {BRANCH} test inference..."
-)
-
-
-for batch_number, (images, labels) in enumerate(
-    test_ds_eval,
-    start=1,
-):
-    model_inputs = select_model_input(
-        images
-    )
-
-    probabilities = model(
-        model_inputs,
-        training=False,
-    ).numpy().reshape(-1)
-
-    y_prob.extend(
-        probabilities
-    )
-
-    y_true.extend(
-        labels.numpy().reshape(-1)
-    )
-
-    if batch_number % 50 == 0:
-        print(
-            f"Processed {batch_number} test samples"
-        )
-
-
-y_true = np.asarray(
-    y_true,
-    dtype=np.int32,
-)
-
-y_prob = np.asarray(
-    y_prob,
-    dtype=np.float32,
-)
-
-
-if len(y_true) == 0:
-    raise ValueError(
-        "The test dataset produced no observations."
-    )
-
-
-if len(y_true) != len(y_prob):
-    raise ValueError(
-        "The numbers of labels and probabilities differ."
-    )
-
-
-# ======================================================================
-# Test metrics
-# ======================================================================
-
-print(
-    f"\n{BRANCH.capitalize()} test results "
-    f"({EVALUATION_SCOPE} evaluation):"
-)
-
-print(
-    f"Number of samples: {len(y_true)}"
-)
-
-print(
-    f"Minimum probability: {y_prob.min()}, "
-    f"maximum probability: {y_prob.max()}, "
-    f"average probability: {y_prob.mean()}"
-)
-
-
-auc = roc_auc_score(
-    y_true,
-    y_prob,
-)
-
-pr_auc = average_precision_score(
-    y_true,
-    y_prob,
-)
-
-raw_bce = log_loss(
-    y_true,
-    y_prob,
-    labels=[0, 1],
-)
-
-
-print(
-    f"AUC: {auc}"
-)
-
-print(
-    f"PR-AUC: {pr_auc}"
-)
-
-print(
-    f"Raw binary cross-entropy: {raw_bce}"
-)
+print(f"\n{BRANCH.capitalize()} test results ({EVALUATION_SCOPE} evaluation):")
+print(f"Number of samples: {len(y_true)}")
+print(f"Probability range: {y_prob.min():.4f}–{y_prob.max():.4f}, mean: {y_prob.mean():.4f}")
+print(f"AUC: {metrics['auc']:.4f}, PR-AUC: {metrics['ap']:.4f}, BCE: {metrics['bce']:.4f}, Brier: {metrics['brier']:.4f}")
 
 
 for threshold in THRESHOLDS:
-    y_pred = (
-        y_prob >= threshold
-    ).astype(np.int32)
-
-    tp = int(
-        (
-            (y_pred == 1)
-            & (y_true == 1)
-        ).sum()
-    )
-
-    fp = int(
-        (
-            (y_pred == 1)
-            & (y_true == 0)
-        ).sum()
-    )
-
-    fn = int(
-        (
-            (y_pred == 0)
-            & (y_true == 1)
-        ).sum()
-    )
-
-    tn = int(
-        (
-            (y_pred == 0)
-            & (y_true == 0)
-        ).sum()
-    )
-
-    precision = (
-        tp / (tp + fp)
-        if tp + fp
-        else 0.0
-    )
-
-    recall = (
-        tp / (tp + fn)
-        if tp + fn
-        else 0.0
-    )
-
-    specificity = (
-        tn / (tn + fp)
-        if tn + fp
-        else 0.0
-    )
-
-    accuracy = (
-        (tp + tn) / len(y_true)
-    )
-
-    f1 = (
-        2 * precision * recall
-        / (precision + recall)
-        if precision + recall
-        else 0.0
-    )
-
-    balanced_accuracy = (
-        recall + specificity
-    ) / 2
+    
+    metrics = calculate_metrics(y_true, y_prob, threshold)
 
     print(
         f"threshold: {threshold:.3f}, "
-        f"accuracy: {accuracy:.4f}, "
-        f"precision: {precision:.4f}, "
-        f"recall: {recall:.4f}, "
-        f"specificity: {specificity:.4f}, "
-        f"f1: {f1:.4f}, "
-        f"balanced_accuracy: {balanced_accuracy:.4f}, "
-        f"TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}"
+        f"accuracy: {metrics["accuracy"]:.4f}, "
+        f"precision: {metrics["precision"]:.4f}, "
+        f"recall: {metrics["recall"]:.4f}, "
+        f"specificity: {metrics["specificity"]:.4f}, "
+        f"f1: {metrics["f1"]:.4f}, "
+        f"balanced_accuracy: {metrics["balanced_accuracy"]:.4f}, "
+        f"TP: {metrics["tp"]}, TN: {metrics["tn"]}, FP: {metrics["fp"]}, FN: {metrics["fn"]}"
     )
 
 # ======================================================================
 # Confusion matrix at the retained threshold
 # ======================================================================
 
-y_pred_retained = (
-    y_prob >= RETAINED_THRESHOLD
-).astype(np.int32)
+y_pred_retained = (y_prob >= RETAINED_THRESHOLD).astype(np.int32)
 
-cm = confusion_matrix(
-    y_true,
-    y_pred_retained,
-    labels=[0, 1],
-)
+cm = confusion_matrix(y_true, y_pred_retained, labels=[0, 1])
 
 display = ConfusionMatrixDisplay(
     confusion_matrix=cm,

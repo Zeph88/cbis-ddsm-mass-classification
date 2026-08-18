@@ -3,55 +3,13 @@ import pandas as pd
 
 from sklearn.model_selection import StratifiedGroupKFold
 
-from src.config import (
-    SEED,
-    DATASET_INDEX,
-    SPLITS_DIR
-)
-
-
-# ================================================================
-# Configuration
-# ================================================================
+from src.config import SEED, DATASET_INDEX, SPLITS_DIR
 
 VAL_PRC = 0.20
 N_SPLIT_TRIALS = 50
 
-
-# ================================================================
-# Data loading
-# ================================================================
-
 df = pd.read_csv(DATASET_INDEX)
-
-required_columns = {
-    "patient_id",
-    "label",
-    "keep",
-    "source",
-}
-
-missing_columns = required_columns - set(df.columns)
-
-if missing_columns:
-    raise ValueError(
-        f"Missing required columns: {sorted(missing_columns)}"
-    )
-
 df["label"] = df["label"].astype(int)
-
-valid_labels = set(df["label"].dropna().unique())
-
-if not valid_labels.issubset({0, 1}):
-    raise ValueError(
-        f"The label column must contain only 0 and 1. "
-        f"Found: {sorted(valid_labels)}"
-    )
-
-
-# ================================================================
-# Diagnostic functions
-# ================================================================
 
 def print_split_summary(
     split_name,

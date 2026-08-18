@@ -6,11 +6,11 @@ import pandas as pd
 import tensorflow as tf
 
 from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
+from src.functions import load_data
 from src.config import BATCH_SIZE, GLOBAL_HEIGHT, GLOBAL_WIDTH, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_MODEL, OUTPUT_NPY, SEED, N_OUTER_FOLDS, MAMMOGRAM_KEY
 from src.training.dataset_preparation import build_tf_dataset
-from src.evaluation.evaluation_metrics import calculate_metrics
+from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
 
-# Configuration
 CV_ROOT = (OUTPUT_MODEL / f"fusion_cv_{N_OUTER_FOLDS}fold_seed_{SEED}")
 FOLDS_DIR = CV_ROOT / "folds"
 
@@ -20,16 +20,7 @@ def load_preprocessed_indexes():
     local_path = OUTPUT_NPY / f"dataset_index_zoom_{LOCAL_HEIGHT}x{LOCAL_WIDTH}.csv"
     global_path = OUTPUT_NPY / f"dataset_index_full_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}.csv"
 
-    if not local_path.exists():
-        raise FileNotFoundError(f"Missing local index: {local_path}")
-
-    if not global_path.exists():
-        raise FileNotFoundError(f"Missing global index: {global_path}")
-
-    local_df = pd.read_csv(local_path)
-    global_df = pd.read_csv(global_path)
-
-    # Match the CV representation of patient IDs.
+    local_df, global_df = load_data(local_path, global_path)
     local_df["patient_id"] = (local_df["patient_id"].astype(str))
     global_df["patient_id"] = (global_df["patient_id"].astype(str))
 
@@ -171,39 +162,21 @@ def build_global_outer_dataset(outer_df):
     )
 
 
-# Predict one saved branch
-def predict_saved_model(model_path, dataset, expected_length):
-    if not model_path.exists():
-        raise FileNotFoundError(f"Missing checkpoint: {model_path}")
-
+def collect_saved_model_predictions(model_path, dataset):
     tf.keras.backend.clear_session()
     gc.collect()
 
     model = tf.keras.models.load_model(model_path, compile=False)
-
-    probabilities = (model.predict(dataset, verbose=1).reshape(-1))
-
-    if len(probabilities) != expected_length:
-        raise RuntimeError(f"Prediction/metadata mismatch: {len(probabilities)} predictions for {expected_length} observations.")
-
-    if not np.isfinite(probabilities).all():
-        raise RuntimeError(f"Non-finite predictions produced by {model_path}.")
-
-    if ((probabilities < 0).any() or (probabilities > 1).any()):
-        raise RuntimeError(f"Probabilities outside [0, 1] produced by {model_path}.")
+    y_true, probabilities = collect_binary_predictions(model, dataset)
 
     del model
-
+    del dataset
     tf.keras.backend.clear_session()
     gc.collect()
 
-    return probabilities
+    return y_true, probabilities
 
-
-# ======================================================================
 # Generate one fold
-# ======================================================================
-
 def generate_fold_predictions(fold, local_index, global_index, overwrite=False):
     
     fold_dir = FOLDS_DIR / f"fold_{fold}"
@@ -229,20 +202,15 @@ def generate_fold_predictions(fold, local_index, global_index, overwrite=False):
     # LOCAL
     print("Predicting saved LOCAL checkpoint...")
 
-    local_ds = (build_local_outer_dataset(outer_df))
-    local_probability = (predict_saved_model(model_path=local_model_path, dataset=local_ds, expected_length=len(outer_df)))
-
-    del local_ds
-    gc.collect()
+    local_ds = build_local_outer_dataset(outer_df)
+    local_true, local_probability = collect_saved_model_predictions(model_path=local_model_path, dataset=local_ds)
 
     # GLOBAL
     print("\nPredicting saved GLOBAL checkpoint...")
 
-    global_ds = (build_global_outer_dataset(outer_df))
-    global_probability = (predict_saved_model(model_path=global_model_path, dataset=global_ds, expected_length=len(outer_df)))
 
-    del global_ds
-    gc.collect()
+    global_ds = (build_global_outer_dataset(outer_df))
+    global_true, global_probability = collect_saved_model_predictions(model_path=global_model_path, dataset=global_ds)
 
     # Create exactly the file expected by analyse_oof.py
     branch_oof = outer_df[
@@ -257,7 +225,6 @@ def generate_fold_predictions(fold, local_index, global_index, overwrite=False):
     branch_oof["local_probability"] = local_probability
     branch_oof["global_probability"] = global_probability
 
-    # Final integrity checks before writing.
     if branch_oof["sample_id"].duplicated().any():
         raise RuntimeError(f"Duplicate sample IDs in fold {fold}.")
 
@@ -267,7 +234,7 @@ def generate_fold_predictions(fold, local_index, global_index, overwrite=False):
     branch_oof.to_csv(output_path, index=False)
 
     # sanity-check metrics
-    y_true = (branch_oof["label"].astype(int).to_numpy())
+    y_true = outer_df["label"].astype(int).to_numpy()
 
     local_scores = (calculate_metrics(y_true, local_probability))
     global_scores = (calculate_metrics(y_true, global_probability))

@@ -3,15 +3,13 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow.keras import layers, models, datasets
 import matplotlib.pyplot as plt
-from src.training.cnn_evaluation import cnn_predict, evaluate_thresholds
+from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
 from src.training.dataset_preparation import cnn_steps, train_val_test_sets
 from src.functions import set_seed, ensure_directory
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, GLOBAL_HEIGHT, GLOBAL_WIDTH, OUTPUT_PLOT
 import math
 import gc
-from src.modeling.global_resnet50 import (
-    build_global_model,
-)
+from src.modeling.global_resnet50 import build_global_model
 
 
 tf.keras.backend.clear_session()
@@ -180,15 +178,11 @@ del eval_val_ds
 gc.collect()
 
 
-y_prob, y_true = cnn_predict(
-    model,
-    test_ds_eval,
-)
+y_true, y_prob = collect_binary_predictions(model, test_ds_eval)
 
-evaluate_thresholds(
-    y_prob,
-    y_true,
-)
+for threshold in [0.35, 0.4, 0.45, 0.5]:
+    metrics = calculate_metrics(y_true, y_prob, threshold)
+    print(f"threshold : {threshold}, accuracy : {metrics["accuracy"]}, precision : {metrics["precision"]}, recall : {metrics["recall"]}")
 
 del test_ds_eval
 del model
@@ -231,7 +225,6 @@ plt.close()
 # AUC plot
 plt.figure(figsize=(8, 5))
 
-# >>> CHANGED
 plt.plot(
     history_values["auc"],
     label="Train AUC",

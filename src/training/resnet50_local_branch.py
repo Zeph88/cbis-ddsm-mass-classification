@@ -3,7 +3,6 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow.keras import layers, models, datasets
 import matplotlib.pyplot as plt
-from src.training.cnn_evaluation import cnn_predict, evaluate_thresholds
 from src.training.dataset_preparation import cnn_steps, train_val_test_sets
 from src.functions import set_seed, ensure_directory
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_PLOT
@@ -139,8 +138,11 @@ model = tf.keras.models.load_model(
     compile=False,
 )
 
-y_prob, y_true = cnn_predict(model, test_ds)
-evaluate_thresholds(y_prob, y_true)
+y_true, y_prob = collect_binary_predictions(model, test_ds)
+
+for threshold in [0.35, 0.4, 0.45, 0.5]:
+    metrics = calculate_metrics(y_true, y_prob, threshold)
+    print(f"threshold : {threshold}, accuracy : {metrics["accuracy"]}, precision : {metrics["precision"]}, recall : {metrics["recall"]}")
 
 # Loss plot
 plt.figure(figsize=(8, 5))

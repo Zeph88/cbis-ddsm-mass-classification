@@ -97,9 +97,7 @@ print(f"dataset_index_{image_type}.csv")
 # Load dataset index
 # ------------------------------------------------------------------
 
-df = pd.read_csv(
-    OUTPUT_NPY / f"dataset_index_{image_type}.csv"
-)
+df = pd.read_csv(OUTPUT_NPY / f"dataset_index_{image_type}.csv")
 
 # Prefer examples from the test set when the column is available.
 if "set" in df.columns:

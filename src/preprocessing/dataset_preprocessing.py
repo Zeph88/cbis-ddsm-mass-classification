@@ -12,6 +12,7 @@ import tensorflow as tf
 
 from src.preprocessing.dicom_handling import read_dicom_as_array, crop_image, resize_with_padding, remove_annotations, fix_border, tensor_to_2d_np, crop_breast_to_target_ratio
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_NPY, SPLITS_DIR, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH, CROP_SIZE
+from src.functions import load_data
 
 
 def clear_directory(directory_path: Union[str, Path]) -> list:
@@ -485,20 +486,13 @@ if __name__ == "__main__":
         zoom_to_roi = False
         resolution = (GLOBAL_HEIGHT, GLOBAL_WIDTH)
 
-    train_df = pd.read_csv(SPLITS_DIR / f"train_split{add_path}.csv")
-    val_df = pd.read_csv(SPLITS_DIR / f"val_split{add_path}.csv")
-    test_df = pd.read_csv(SPLITS_DIR / f"test_split{add_path}.csv")
+    train_df, val_df, test_df = load_data(SPLITS_DIR / f"train_split{add_path}.csv", SPLITS_DIR / f"val_split{add_path}.csv", SPLITS_DIR / f"test_split{add_path}.csv")
 
     train_df["set"] = "train"
     val_df["set"] = "validation"
     test_df["set"] = "test"
 
-    df = pd.concat(
-        [train_df, val_df, test_df],
-        axis=0,
-        ignore_index=True
-    )
-
+    df = pd.concat([train_df, val_df, test_df], axis=0, ignore_index=True)
     df = add_sample_id(df)
 
     print(

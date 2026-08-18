@@ -31,23 +31,12 @@ SPLIT_FILES = {
 }
 
 
-# ------------------------------------------------------------------
-# Mammogram-level dataset creation
-# ------------------------------------------------------------------
-
 def create_global_split(
     input_path: Path,
     output_path: Path,
     mammogram_columns: list[str],
     label_column: str,
 ) -> pd.DataFrame:
-    """
-    Convert a lesion-level split into a mammogram-level split.
-
-    One row is retained per mammogram. When the same mammogram is
-    associated with both benign and malignant lesions, the malignant
-    row is retained.
-    """
 
     df = pd.read_csv(input_path)
 

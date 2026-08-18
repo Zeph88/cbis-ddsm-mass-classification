@@ -6,25 +6,19 @@ import pandas as pd
 import tensorflow as tf
 
 from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
-from sklearn.model_selection import StratifiedGroupKFold,
+from sklearn.model_selection import StratifiedGroupKFold
 
-from src.config import BATCH_SIZE, EPOCHS, GLOBAL_HEIGHT, GLOBAL_WIDTH, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_MODEL, OUTPUT_NPY, SEED, SPLITS_DIR, MAMMOGRAM_KEY
+from src.config import BATCH_SIZE, EPOCHS, GLOBAL_HEIGHT, GLOBAL_WIDTH, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_MODEL, OUTPUT_NPY, SEED, SPLITS_DIR, MAMMOGRAM_KEY, N_OUTER_FOLDS
 from src.modeling.local_resnet50 import build_local_model
-from src.modeling.global_resnet50 import build_global_model,
+from src.modeling.global_resnet50 import build_global_model
 from src.modeling.fusion import build_residual_fusion, build_symmetric_fusion
-from src.functions import ensure_directory, set_seed
+from src.functions import ensure_directory, set_seed, load_data
 from src.training.dataset_preparation import build_tf_dataset
+from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
 
+N_INNER_FOLDS = N_OUTER_FOLDS
 
-N_OUTER_FOLDS = 5
-N_INNER_FOLDS = 5
-
-
-CV_ROOT = (
-    OUTPUT_MODEL
-    / f"fusion_cv_{N_OUTER_FOLDS}fold_seed_{SEED}"
-)
-
+CV_ROOT = OUTPUT_MODEL / f"fusion_cv_{N_OUTER_FOLDS}fold_seed_{SEED}"
 FOLDS_DIR = CV_ROOT / "folds"
 RESULTS_DIR = CV_ROOT / "results"
 
@@ -32,125 +26,35 @@ ensure_directory(CV_ROOT)
 ensure_directory(FOLDS_DIR)
 ensure_directory(RESULTS_DIR)
 
-def compile_binary_model(
-    model,
-    learning_rate=1e-4,
-):
+def compile_binary_model(model, learning_rate=1e-4):
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(
-            learning_rate=learning_rate,
-        ),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
         loss=tf.keras.losses.BinaryCrossentropy(),
         metrics=[
-            tf.keras.metrics.AUC(
-                name="auc",
-                curve="ROC",
-            ),
-            tf.keras.metrics.AUC(
-                name="pr_auc",
-                curve="PR",
-            ),
-        ],
+            tf.keras.metrics.AUC(name="auc", curve="ROC"),
+            tf.keras.metrics.AUC(name="pr_auc", curve="PR")
+        ]
     )
 
     return model
 
-def load_original_development_metadata():
-    train_df = pd.read_csv(
-        SPLITS_DIR / "train_split.csv"
-    )
-
-    val_df = pd.read_csv(
-        SPLITS_DIR / "val_split.csv"
-    )
-
-    test_df = pd.read_csv(
-        SPLITS_DIR / "test_split.csv"
-    )
-
-    dev_df = pd.concat(
-        [
-            train_df,
-            val_df,
-        ],
-        ignore_index=True,
-    )
-
-    dev_df["patient_id"] = (
-        dev_df["patient_id"]
-        .astype(str)
-    )
-
-    test_df["patient_id"] = (
-        test_df["patient_id"]
-        .astype(str)
-    )
-
-    dev_df["label"] = (
-        dev_df["label"]
-        .astype(int)
-    )
-
-    overlap = (
-        set(dev_df["patient_id"])
-        & set(test_df["patient_id"])
-    )
-
-    if overlap:
-        raise RuntimeError(
-            "Patient leakage between development and test: "
-            f"{sorted(overlap)[:5]}"
-        )
-
-    return dev_df
-
-def create_outer_patient_folds(
-    dev_meta,
-):
-    splitter = StratifiedGroupKFold(
-        n_splits=N_OUTER_FOLDS,
-        shuffle=True,
-        random_state=SEED,
-    )
-
-    labels = (
-        dev_meta["label"]
-        .to_numpy()
-    )
-
-    groups = (
-        dev_meta["patient_id"]
-        .to_numpy()
-    )
-
-    dummy_x = np.zeros(
-        (len(dev_meta), 1),
-        dtype=np.float32,
-    )
+def create_outer_patient_folds(dev_meta):
+    splitter = StratifiedGroupKFold(n_splits=N_OUTER_FOLDS, shuffle=True, random_state=SEED)
+    labels = (dev_meta["label"].to_numpy())
+    groups = (dev_meta["patient_id"].to_numpy())
+    dummy_x = np.zeros((len(dev_meta), 1), dtype=np.float32)
 
     patient_to_fold = {}
     rows = []
 
-    for fold, (_, eval_indices) in enumerate(
-        splitter.split(
-            dummy_x,
-            labels,
-            groups,
-        )
-    ):
-        patients = pd.unique(
-            groups[eval_indices]
-        )
+    for fold, (_, eval_indices) in enumerate(splitter.split(dummy_x, labels, groups)):
+        patients = pd.unique(groups[eval_indices])
 
         for patient_id in patients:
             if patient_id in patient_to_fold:
-                raise RuntimeError(
-                    f"{patient_id} assigned twice."
-                )
+                raise RuntimeError(f"{patient_id} assigned twice.")
 
-            patient_to_fold[
-                patient_id
-            ] = fold
+            patient_to_fold[patient_id] = fold
 
             rows.append(
                 {
@@ -256,26 +160,11 @@ def create_inner_patient_split(
         "outer_evaluation": outer_eval_patients,
     }
 
-def load_preprocessed_indexes(
-    dev_patient_ids,
-):
-    local_path = (
-        OUTPUT_NPY
-        / f"dataset_index_zoom_{LOCAL_HEIGHT}x{LOCAL_WIDTH}.csv"
-    )
+def load_preprocessed_indexes(dev_patient_ids):
 
-    global_path = (
-        OUTPUT_NPY
-        / f"dataset_index_full_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}.csv"
-    )
-
-    local_df = pd.read_csv(
-        local_path
-    )
-
-    global_df = pd.read_csv(
-        global_path
-    )
+    local_path = OUTPUT_NPY / f"dataset_index_zoom_{LOCAL_HEIGHT}x{LOCAL_WIDTH}.csv"
+    global_path = OUTPUT_NPY / f"dataset_index_full_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}.csv"
+    local_df, global_df = load_data(local_path, global_path)
 
     local_df["patient_id"] = (
         local_df["patient_id"]
@@ -649,66 +538,11 @@ def train_fusion(
     tf.keras.backend.clear_session()
     gc.collect()
 
-def calculate_metrics(
-    y_true,
-    probability,
-):
-    return {
-        "auc": roc_auc_score(
-            y_true,
-            probability,
-        ),
+def evaluate_fusion(model_path, outer_eval_ds, outer_metadata):
 
-        "bce": log_loss(
-            y_true,
-            probability,
-            labels=[0, 1],
-        ),
+    model = tf.keras.models.load_model(model_path, compile=False)
 
-        "ap": average_precision_score(
-            y_true,
-            probability,
-        ),
-
-        "brier": brier_score_loss(
-            y_true,
-            probability,
-        ),
-    }
-
-def evaluate_fusion(
-    model_path,
-    outer_eval_ds,
-    outer_metadata,
-):
-    model = (
-        tf.keras.models.load_model(
-            model_path,
-            compile=False,
-        )
-    )
-
-    probabilities = (
-        model.predict(
-            outer_eval_ds,
-            verbose=0,
-        )
-        .reshape(-1)
-    )
-
-    if (
-        len(probabilities)
-        != len(outer_metadata)
-    ):
-        raise RuntimeError(
-            "Prediction/metadata mismatch."
-        )
-
-    y_true = (
-        outer_metadata["label"]
-        .astype(int)
-        .to_numpy()
-    )
+    y_true, probabilities = collect_binary_predictions(model, outer_eval_ds)
 
     scores = calculate_metrics(
         y_true,
@@ -773,10 +607,7 @@ def run_one_fold(
         LOCAL_WIDTH,
     )
 
-    local_path = (
-        fold_dir
-        / "local.keras"
-    )
+    local_path = fold_dir / "local.keras"
 
     train_branch(
         build_local_model,
@@ -969,14 +800,11 @@ def parse_args():
 
 def main():
     args = parse_args()
+    set_seed(SEED)
 
-    set_seed(
-        SEED
-    )
-
-    dev_meta = (
-        load_original_development_metadata()
-    )
+    dev_meta = load_data(SPLITS_DIR / "train_split.csv", SPLITS_DIR / "val_split.csv", SPLITS_DIR / "test_split.csv")
+    dev_meta["patient_id"] = dev_meta["patient_id"].astype(str)
+    dev_meta["label"] = dev_meta["label"].astype(int)
 
     patient_to_outer_fold = (
         create_outer_patient_folds(

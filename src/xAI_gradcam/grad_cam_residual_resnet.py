@@ -10,7 +10,7 @@ import pandas as pd
 import tensorflow as tf
 import argparse
 
-from src.functions import ensure_directory
+from src.functions import ensure_directory, load_data
 
 from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, IMAGES_ROOT, MAMMOGRAM_KEY
 
@@ -156,19 +156,9 @@ def get_layers_between(
 
 
 
-def build_paired_test_dataframe(
-    local_index_path,
-    global_index_path,
-):
-    """Pair each local lesion crop with its corresponding mammogram."""
+def build_paired_test_dataframe(local_index_path, global_index_path):
 
-    local_df = pd.read_csv(
-        local_index_path
-    )
-
-    global_df = pd.read_csv(
-        global_index_path
-    )
+    local_df, global_df = load_data(local_index_path, global_index_path)
 
     required_local_columns = (
         MAMMOGRAM_KEY

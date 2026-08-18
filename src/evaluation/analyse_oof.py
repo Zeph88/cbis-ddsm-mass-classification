@@ -7,7 +7,7 @@ from sklearn.metrics import average_precision_score, brier_score_loss, log_loss,
 
 from src.config import OUTPUT_MODEL, SEED, N_OUTER_FOLDS, ARCHITECTURES, N_BOOTSTRAP, N_CALIBRATION_BINS
 from src.functions import ensure_directory
-from src.evaluation.evaluation_metrics import calculate_metrics
+from src.evaluation.evaluation_utils import calculate_metrics
 
 # Configuration
 METRIC_NAMES = ["auc", "bce", "ap", "brier"]

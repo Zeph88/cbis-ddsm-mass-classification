@@ -18,7 +18,7 @@ from src.config import OUTPUT_NPY, OUTPUT_MODEL, OUTPUT_PLOT, SEED, MAMMOGRAM_KE
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-from src.functions import set_seed, ensure_directory
+from src.functions import set_seed, ensure_directory, load_data
 
 from src.training.dataset_preparation import (
     train_val_test_sets,
@@ -183,26 +183,8 @@ local_width = local_model.input_shape[2]
 global_height = global_model.input_shape[1]
 global_width = global_model.input_shape[2]
 
-
-# ======================================================================
-# Load dataset indexes
-# ======================================================================
-
-local_index_path = (
-    OUTPUT_NPY
-    / (
-        f"dataset_index_zoom_"
-        f"{local_height}x{local_width}.csv"
-    )
-)
-
-global_index_path = (
-    OUTPUT_NPY
-    / (
-        f"dataset_index_full_"
-        f"{global_height}x{global_width}.csv"
-    )
-)
+local_index_path = OUTPUT_NPY / f"dataset_index_zoom_{local_height}x{local_width}.csv"
+global_index_path = OUTPUT_NPY / f"dataset_index_full_{global_height}x{global_width}.csv"
 
 print(
     "\nLocal index:",
@@ -214,14 +196,7 @@ print(
     global_index_path,
 )
 
-local_df = pd.read_csv(
-    local_index_path
-)
-
-global_df = pd.read_csv(
-    global_index_path
-)
-
+local_df, global_df = load_data(local_index_path, global_index_path)
 
 # ======================================================================
 # Pair every local lesion with its full mammogram

@@ -3,7 +3,7 @@ import pathlib
 from pathlib import Path
 import pandas as pd 
 import numpy as np 
-from src.functions import set_seed, check_path
+from src.functions import set_seed, check_path, load_data
 from src.config import TRAIN_CSV, TEST_CSV, IMAGES_ROOT, DATASET_INDEX, SEED
 import pydicom
 
@@ -45,10 +45,8 @@ def find_dicom_by_series_description(csv_path_value, images_root, expected_descr
     return None
 
 def load_metadata():
-    df_train = pd.read_csv(TRAIN_CSV)
+    df_train, df_test = load_data(TRAIN_CSV, TEST_CSV)
     df_train["source"] = "train"
-
-    df_test = pd.read_csv(TEST_CSV)
     df_test["source"] = "test"
 
     return pd.concat([df_train, df_test], ignore_index=True)
