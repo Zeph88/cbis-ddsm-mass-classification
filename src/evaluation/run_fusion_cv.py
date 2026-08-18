@@ -5,68 +5,24 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from sklearn.metrics import (
-    average_precision_score,
-    brier_score_loss,
-    log_loss,
-    roc_auc_score,
-)
+from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
+from sklearn.model_selection import StratifiedGroupKFold,
 
-from sklearn.model_selection import (
-    StratifiedGroupKFold,
-)
-
-from src.config import (
-    BATCH_SIZE,
-    EPOCHS,
-    GLOBAL_HEIGHT,
-    GLOBAL_WIDTH,
-    LOCAL_HEIGHT,
-    LOCAL_WIDTH,
-    OUTPUT_MODEL,
-    OUTPUT_NPY,
-    SEED,
-    SPLITS_DIR,
-)
-
-from src.modeling.local_resnet50 import (
-    build_local_model,
-)
-
-from src.modeling.global_resnet50 import (
-    build_global_model,
-)
-
-from src.modeling.fusion import (
-    build_residual_fusion,
-    build_symmetric_fusion,
-)
-
-from src.functions import (
-    ensure_directory,
-    set_seed,
-)
-
-from src.training.dataset_preparation import (
-    build_tf_dataset,
-)
+from src.config import BATCH_SIZE, EPOCHS, GLOBAL_HEIGHT, GLOBAL_WIDTH, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_MODEL, OUTPUT_NPY, SEED, SPLITS_DIR, MAMMOGRAM_KEY
+from src.modeling.local_resnet50 import build_local_model
+from src.modeling.global_resnet50 import build_global_model,
+from src.modeling.fusion import build_residual_fusion, build_symmetric_fusion
+from src.functions import ensure_directory, set_seed
+from src.training.dataset_preparation import build_tf_dataset
 
 
 N_OUTER_FOLDS = 5
 N_INNER_FOLDS = 5
 
-TRAINING_SEED = SEED
-
-MAMMOGRAM_KEY = [
-    "patient_id",
-    "left or right breast",
-    "image view",
-]
-
 
 CV_ROOT = (
     OUTPUT_MODEL
-    / f"fusion_cv_{N_OUTER_FOLDS}fold_seed_{TRAINING_SEED}"
+    / f"fusion_cv_{N_OUTER_FOLDS}fold_seed_{SEED}"
 )
 
 FOLDS_DIR = CV_ROOT / "folds"
@@ -154,7 +110,7 @@ def create_outer_patient_folds(
     splitter = StratifiedGroupKFold(
         n_splits=N_OUTER_FOLDS,
         shuffle=True,
-        random_state=TRAINING_SEED,
+        random_state=SEED,
     )
 
     labels = (
@@ -227,7 +183,7 @@ def create_inner_patient_split(
         n_splits=N_INNER_FOLDS,
         shuffle=True,
         random_state=(
-            TRAINING_SEED
+            SEED
             + outer_fold
         ),
     )
@@ -401,7 +357,7 @@ def build_single_input_datasets(
         train_df,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        seed=TRAINING_SEED,
+        seed=SEED,
         image_height=height,
         image_width=width,
     )
@@ -410,7 +366,7 @@ def build_single_input_datasets(
         val_df,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        seed=TRAINING_SEED,
+        seed=SEED,
         image_height=height,
         image_width=width,
     )
@@ -493,7 +449,7 @@ def build_paired_datasets(
 
     kwargs = dict(
         batch_size=BATCH_SIZE,
-        seed=TRAINING_SEED,
+        seed=SEED,
         path_image="local_path",
         added_path_image="global_path",
         image_height=LOCAL_HEIGHT,
@@ -584,11 +540,11 @@ def train_branch(
         return
 
     set_seed(
-        TRAINING_SEED
+        SEED
     )
 
     model = build_fn(
-        seed=TRAINING_SEED
+        seed=SEED
     )
 
     compile_binary_model(
@@ -636,7 +592,7 @@ def train_fusion(
     gc.collect()
 
     set_seed(
-        TRAINING_SEED
+        SEED
     )
 
     local_model = (
@@ -906,7 +862,7 @@ def run_one_fold(
 
     predictions_df[
         "seed"
-    ] = TRAINING_SEED
+    ] = SEED
 
     metric_rows = []
 
@@ -951,7 +907,7 @@ def run_one_fold(
         metric_rows.append(
             {
                 "fold": outer_fold,
-                "seed": TRAINING_SEED,
+                "seed": SEED,
                 "architecture":
                     architecture,
                 "n_outer_evaluation":
@@ -1015,7 +971,7 @@ def main():
     args = parse_args()
 
     set_seed(
-        TRAINING_SEED
+        SEED
     )
 
     dev_meta = (

@@ -16,12 +16,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from src.config import (
-    OUTPUT_MODEL,
-    OUTPUT_NPY,
-    OUTPUT_PLOT,
-    SEED,
-)
+from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY
 
 from src.functions import set_seed, ensure_directory
 
@@ -86,13 +81,6 @@ THRESHOLDS = [
     0.55,
     0.60,
     0.65,
-]
-
-
-MAMMOGRAM_KEY = [
-    "patient_id",
-    "left or right breast",
-    "image view",
 ]
 
 

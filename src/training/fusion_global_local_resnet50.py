@@ -13,12 +13,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from src.config import (
-    OUTPUT_NPY,
-    OUTPUT_MODEL,
-    OUTPUT_PLOT,
-    SEED,
-)
+from src.config import OUTPUT_NPY, OUTPUT_MODEL, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY
 
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -75,12 +70,6 @@ THRESHOLDS = [
     0.55,
     0.60,
     0.65,
-]
-
-MAMMOGRAM_KEY = [
-    "patient_id",
-    "left or right breast",
-    "image view",
 ]
 
 

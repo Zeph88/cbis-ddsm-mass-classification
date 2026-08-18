@@ -12,6 +12,16 @@ GLOBAL_HEIGHT = 768
 GLOBAL_WIDTH = 512
 CROP_SIZE = 512 # Liao methodology
 
+N_OUTER_FOLDS = 5
+
+N_BOOTSTRAP = 10_000
+N_CALIBRATION_BINS = 5
+
+ARCHITECTURES = ["local", "global", "symmetric", "residual"]
+
+# Used to link local lesion to global context
+MAMMOGRAM_KEY = ["patient_id", "left or right breast", "image view"]
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = PROJECT_ROOT / "data"
 

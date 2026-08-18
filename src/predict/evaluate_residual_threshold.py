@@ -13,12 +13,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from src.config import (
-    OUTPUT_MODEL,
-    OUTPUT_NPY,
-    OUTPUT_PLOT,
-    SEED,
-)
+from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY
 
 from src.functions import set_seed, ensure_directory
 
@@ -65,12 +60,6 @@ THRESHOLD_PLOT_PATH = (
 MINIMUM_RECALL = 0.85
 
 SELECTION_METHOD = "minimum_recall"
-
-MAMMOGRAM_KEY = [
-    "patient_id",
-    "left or right breast",
-    "image view",
-]
 
 
 # ======================================================================

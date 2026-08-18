@@ -12,13 +12,7 @@ import argparse
 
 from src.functions import ensure_directory
 
-from src.config import (
-    OUTPUT_MODEL,
-    OUTPUT_NPY,
-    OUTPUT_PLOT,
-    SEED,
-    IMAGES_ROOT,
-)
+from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, IMAGES_ROOT, MAMMOGRAM_KEY
 
 from src.preprocessing.dicom_handling import (
     read_dicom_as_array,
@@ -95,12 +89,6 @@ CORRECTION_DROPOUT_LAYER_NAME = "contextual_correction_dropout"
 CORRECTION_OUTPUT_LAYER_NAME = "contextual_logit_correction"
 FINAL_LOGIT_LAYER_NAME = "local_logit_plus_contextual_correction"
 FINAL_OUTPUT_LAYER_NAME = "residual_fusion_output"
-
-MAMMOGRAM_KEY = [
-    "patient_id",
-    "left or right breast",
-    "image view",
-]
 
 # Index within the paired test dataframe.
 SAMPLE_INDEX = args.idx

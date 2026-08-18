@@ -38,7 +38,7 @@ data/external/
 /src/models/
 /src/experiments/
 *.pt
-*.pth
+*.pthgit status
 *.ckpt
 *.h5
 
