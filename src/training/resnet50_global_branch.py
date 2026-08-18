@@ -104,9 +104,7 @@ model.compile(
 
 model.summary()
 
-head_checkpoint_path = (
-    OUTPUT_MODEL / f"global_resnet50_head.keras"
-)
+head_checkpoint_path = OUTPUT_MODEL / f"global_resnet50_head.keras"
 
 callbacks_head = [
     tf.keras.callbacks.EarlyStopping(

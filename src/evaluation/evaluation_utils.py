@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import tensorflow as tf
 from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
 from src.config import OUTPUT_MODEL, SEED, N_BOOTSTRAP, N_CALIBRATION_BINS, ARCHITECTURES, N_OUTER_FOLDS
 from src.functions import ensure_directory
@@ -49,6 +49,7 @@ def calculate_metrics(y_true, probability, threshold=None):
         "precision": precision,
         "recall": recall,
         "specificity": specificity,
+        "sensitivity": recall,
         "accuracy": accuracy,
         "f1": f1,
         "balanced_accuracy": balanced_accuracy,

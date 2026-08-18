@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from src.training.dataset_preparation import cnn_steps, train_val_test_sets
 from src.functions import set_seed, ensure_directory
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_PLOT
+from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
 import math
 
 from src.modeling.local_resnet50 import (

@@ -212,15 +212,18 @@ def generate_fold_predictions(fold, local_index, global_index, overwrite=False):
     global_ds = (build_global_outer_dataset(outer_df))
     global_true, global_probability = collect_saved_model_predictions(model_path=global_model_path, dataset=global_ds)
 
+
+    y_true = outer_df["label"].astype(np.int32).to_numpy()
+
+    # sanity-check metrics
+    if not np.array_equal(local_true, expected_labels):
+        raise RuntimeError("Local dataset labels do not match outer metadata.")
+
+    if not np.array_equal(global_true, expected_labels):
+        raise RuntimeError("Global dataset labels do not match outer metadata.")
+
     # Create exactly the file expected by analyse_oof.py
-    branch_oof = outer_df[
-        [
-            "sample_id",
-            # "patient_id",
-            "fold",
-            # "label",
-        ]
-    ].copy()
+    branch_oof = outer_df[["sample_id", "fold"]].copy()
 
     branch_oof["local_probability"] = local_probability
     branch_oof["global_probability"] = global_probability
@@ -232,9 +235,6 @@ def generate_fold_predictions(fold, local_index, global_index, overwrite=False):
         raise RuntimeError(f"Missing branch predictions in fold {fold}.")
 
     branch_oof.to_csv(output_path, index=False)
-
-    # sanity-check metrics
-    y_true = outer_df["label"].astype(int).to_numpy()
 
     local_scores = (calculate_metrics(y_true, local_probability))
     global_scores = (calculate_metrics(y_true, global_probability))
