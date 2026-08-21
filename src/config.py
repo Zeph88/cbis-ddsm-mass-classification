@@ -16,6 +16,8 @@ N_OUTER_FOLDS = 5
 
 N_BOOTSTRAP = 10_000
 N_CALIBRATION_BINS = 5
+OPTIMAL_THRESHOLDS = 0.265
+THRESHOLDS = [0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65]
 
 ARCHITECTURES = ["local", "global", "symmetric", "residual"]
 

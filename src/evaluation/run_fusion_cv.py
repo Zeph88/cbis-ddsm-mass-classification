@@ -1,4 +1,3 @@
-import argparse
 import gc
 
 import numpy as np
@@ -12,7 +11,7 @@ from src.config import BATCH_SIZE, EPOCHS, GLOBAL_HEIGHT, GLOBAL_WIDTH, LOCAL_HE
 from src.modeling.local_resnet50 import build_local_model
 from src.modeling.global_resnet50 import build_global_model
 from src.modeling.fusion import build_residual_fusion, build_symmetric_fusion
-from src.functions import ensure_directory, set_seed, load_data
+from src.functions import ensure_directory, set_seed, load_data, parse_arguments
 from src.training.dataset_preparation import build_tf_dataset
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
 
@@ -770,36 +769,28 @@ def run_one_fold(
         index=False,
     )
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-
-    group = (
-        parser
-        .add_mutually_exclusive_group(
-            required=True
-        )
-    )
-
-    group.add_argument(
-        "--fold",
-        type=int,
-        choices=range(N_OUTER_FOLDS),
-    )
-
-    group.add_argument(
-        "--all",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--force",
-        action="store_true",
-    )
-
-    return parser.parse_args()
-
 def main():
-    args = parse_args()
+    args = parse_arguments(
+        description="Generate fold predictions.",
+        arguments=[
+            {
+                "name": "--force",
+                "action": "store_true",
+            },
+        ],
+        exclusive_arguments=[
+            {
+                "name": "--fold",
+                "type": int,
+                "choices": range(N_OUTER_FOLDS),
+            },
+            {
+                "name": "--all",
+                "action": "store_true",
+            },
+        ],
+        exclusive_required=True,
+    )
     set_seed(SEED)
 
     dev_meta = load_data(SPLITS_DIR / "train_split.csv", SPLITS_DIR / "val_split.csv", SPLITS_DIR / "test_split.csv")

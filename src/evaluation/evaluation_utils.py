@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
-from src.config import OUTPUT_MODEL, SEED, N_BOOTSTRAP, N_CALIBRATION_BINS, ARCHITECTURES, N_OUTER_FOLDS
+from src.config import OUTPUT_MODEL, SEED, N_BOOTSTRAP, N_CALIBRATION_BINS, ARCHITECTURES, N_OUTER_FOLDS, THRESHOLDS
 from src.functions import ensure_directory
 
 
@@ -88,3 +88,62 @@ def collect_binary_predictions(model: tf.keras.Model, dataset: tf.data.Dataset, 
     y_probability = np.concatenate(predicted_probabilities)
 
     return y_true, y_probability
+
+def build_binary_metrics(thresholds=THRESHOLDS):
+    
+    metrics = [
+        tf.keras.metrics.BinaryAccuracy(name="accuracy"),
+        tf.keras.metrics.AUC(name="auc", curve="ROC"),
+        tf.keras.metrics.AUC(name="pr_auc", curve="PR"),
+    ]
+
+    for threshold in thresholds:
+        suffix = int(threshold * 100)
+
+        metrics.extend([
+            tf.keras.metrics.Recall(
+                name=f"recall_{suffix}",
+                thresholds=threshold,
+            ),
+            tf.keras.metrics.Precision(
+                name=f"precision_{suffix}",
+                thresholds=threshold,
+            ),
+        ])
+
+    return metrics
+
+def plot_training_metric(history, metric_name, ylabel, title, output_path):
+
+    train_key = metric_name
+    validation_key = f"val_{metric_name}"
+
+    if train_key not in history.history:
+        raise KeyError(f"Metric '{train_key}' was not found in history. Available metrics: {list(history.history.keys())}")
+
+    if validation_key not in history.history:
+        raise KeyError(f"Metric '{validation_key}' was not found in history. Available metrics: {list(history.history.keys())}")
+
+    train_values = history.history[train_key]
+    validation_values = history.history[validation_key]
+
+    epochs = range(1, len(train_values) + 1)
+
+    plt.figure(figsize=(8, 5))
+
+    plt.plot(epochs, train_values, label=f"Training {metric_name}")
+    plt.plot(epochs, validation_values, label=f"Validation {metric_name}")
+
+    plt.xlabel("Epoch")
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+
+    plt.show()
+    plt.close()
+
+    print(f"Graph saved to: {output_path}")

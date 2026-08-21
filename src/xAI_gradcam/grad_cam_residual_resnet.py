@@ -3,69 +3,45 @@ import os
 
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
-import matplotlib as mpl
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import argparse
 
-from src.functions import ensure_directory, load_data
-
+from src.functions import ensure_directory, load_data, parse_arguments
 from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, IMAGES_ROOT, MAMMOGRAM_KEY
-
-from src.preprocessing.dicom_handling import (
-    read_dicom_as_array,
-)
-
-from src.preprocessing.dataset_preprocessing import (
-    orient_by_breast_mass,
-)
+from src.preprocessing.dicom_handling import read_dicom_as_array
+from src.preprocessing.dataset_preprocessing import orient_by_breast_mass
 
 from src.xAI_gradcam.gradcam_utils import (
     apply_layers_inference,
     build_resnet_feature_model,
+    call_layer_inference,
     get_required_layer,
     load_single_channel_image,
     make_gradcam_heatmap,
-    prepare_image_for_display,
-    call_layer_inference,
+    save_gradcam_figures,
 )
-
-# ======================================================================
-# Configuration
-# ======================================================================
 
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
 
-
-parser = argparse.ArgumentParser(
-    description="Apply GradCam to mammograms leveraging the residual ResNet50 fusion model."
+args = parse_arguments(
+    description=("Apply GradCAM to mammograms leveraging the residual ResNet50 fusion model."),
+    arguments=[
+        {
+            "name": "--idx",
+            "type": int,
+            "required": True,
+            "help": ("Enter the index of the mammogram to be analyzed.")
+        },
+        {
+            "name": "--target_class",
+            "choices": ["predicted", "0", "1"],
+            "default": "predicted",
+            "help": ("Class to explain: 'predicted', '0' for benign, or '1' for malignant.")
+        }
+    ]
 )
-
-parser.add_argument(
-    "--idx",
-    type=int,
-    required=True,
-    help="Enter the index of the mammogram to be analyzed."
-)
-
-parser.add_argument(
-    "--target_class",
-    choices=[
-        "predicted",
-        "0",
-        "1",
-    ],
-    default="predicted",
-    help=(
-        "Class to explain: 'predicted', "
-        "'0' for benign, or '1' for malignant."
-    ),
-)
-
-args = parser.parse_args()
 
 # Adjust this path only if the residual checkpoint uses another filename.
 RESIDUAL_MODEL_PATH = (
@@ -277,170 +253,6 @@ def build_paired_test_dataframe(local_index_path, global_index_path):
         drop=True
     )
 
-
-def save_gradcam_figures(
-    image_array,
-    heatmap,
-    branch_name,
-    output_prefix,
-    title_details,
-    roi_mask=None,
-):
-    """Save original image, heatmap, overlay, and a combined figure."""
-
-    image_gray, image_rgb = prepare_image_for_display(
-        image_array
-    )
-
-    heatmap_resized = tf.image.resize(
-        heatmap[..., np.newaxis],
-        size=image_gray.shape[:2],
-        method="bilinear",
-    ).numpy()[..., 0]
-
-    heatmap_resized = np.maximum(
-        heatmap_resized,
-        0,
-    )
-
-    heatmap_resized /= (
-        heatmap_resized.max() + 1e-8
-    )
-
-    colormap = mpl.colormaps["jet"]
-
-    heatmap_rgb = colormap(
-        heatmap_resized
-    )[..., :3]
-
-    overlay = (
-        (1.0 - HEATMAP_ALPHA) * image_rgb
-        + HEATMAP_ALPHA * heatmap_rgb
-    )
-
-    overlay = np.clip(
-        overlay,
-        0,
-        1,
-    )
-
-    base_path = (
-        GRADCAM_OUTPUT_DIR
-        / f"{output_prefix}_{branch_name}"
-    )
-
-    plt.figure(figsize=(7, 7))
-    plt.imshow(image_gray, cmap="gray", vmin=0, vmax=1)
-    plt.title(
-        f"{branch_name.capitalize()} image | {title_details}"
-    )
-    plt.axis("off")
-    plt.savefig(
-        f"{base_path}_original.png",
-        dpi=300,
-        bbox_inches="tight",
-    )
-    plt.close()
-
-    plt.figure(figsize=(7, 7))
-    plt.imshow(heatmap_resized, cmap="jet", vmin=0, vmax=1)
-    plt.title(
-        f"Residual fusion Grad-CAM ({branch_name}) | "
-        f"{title_details}"
-    )
-    plt.axis("off")
-    plt.savefig(
-        f"{base_path}_heatmap.png",
-        dpi=300,
-        bbox_inches="tight",
-    )
-    plt.close()
-
-    plt.figure(figsize=(7, 7))
-    plt.imshow(overlay)
-    plt.title(
-        f"Residual fusion Grad-CAM ({branch_name}) | "
-        f"{title_details}"
-    )
-    plt.axis("off")
-    plt.savefig(
-        f"{base_path}_overlay.png",
-        dpi=300,
-        bbox_inches="tight",
-    )
-    plt.close()
-
-    figure, axes = plt.subplots(
-        1,
-        3,
-        figsize=(18, 6),
-    )
-
-    axes[0].imshow(
-        image_gray,
-        cmap="gray",
-        vmin=0,
-        vmax=1,
-    )
-    axes[0].set_title("Original")
-    axes[0].axis("off")
-
-    axes[1].imshow(
-        heatmap_resized,
-        cmap="jet",
-        vmin=0,
-        vmax=1,
-    )
-    axes[1].set_title("Grad-CAM")
-    axes[1].axis("off")
-
-    axes[2].imshow(overlay)
-    axes[2].set_title("Overlay")
-    axes[2].axis("off")
-
-    figure.suptitle(
-        f"Residual fusion Grad-CAM ({branch_name}) | "
-        f"{title_details}"
-    )
-
-    figure.tight_layout()
-
-    figure.savefig(
-        f"{base_path}_combined.png",
-        dpi=300,
-        bbox_inches="tight",
-    )
-
-    plt.close(figure)
-
-    print(
-        f"Saved {branch_name} Grad-CAM figures with prefix: "
-        f"{base_path}"
-    )
-
-    if roi_mask is not None:
-        plt.figure(figsize=(7, 7))
-
-        plt.imshow(overlay)
-
-        plt.contour(
-            roi_mask.astype(np.float32),
-            levels=[0.5],
-            linewidths=2,
-        )
-
-        plt.title(
-            f"Grad-CAM vs lesion ROI | {title_details}"
-        )
-
-        plt.axis("off")
-
-        plt.savefig(
-            f"{base_path}_roi_comparison.png",
-            dpi=300,
-            bbox_inches="tight",
-        )
-        plt.close()
 
 def evaluate_gradcam_against_roi(
     heatmap,
@@ -1360,6 +1172,9 @@ save_gradcam_figures(
     branch_name="local",
     output_prefix=output_prefix,
     title_details=title_details,
+    output_dir=GRADCAM_OUTPUT_DIR,
+    model_name="Residual fusion Grad-CAM",
+    heatmap_alpha=HEATMAP_ALPHA,
 )
 
 save_gradcam_figures(
@@ -1368,7 +1183,10 @@ save_gradcam_figures(
     branch_name="global",
     output_prefix=output_prefix,
     title_details=title_details,
+    output_dir=GRADCAM_OUTPUT_DIR,
+    model_name="Residual fusion Grad-CAM",
     roi_mask=roi_mask,
+    heatmap_alpha=HEATMAP_ALPHA,
 )
 
 local_probability = float(

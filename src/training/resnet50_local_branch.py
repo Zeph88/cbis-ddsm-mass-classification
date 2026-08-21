@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from src.training.dataset_preparation import cnn_steps, train_val_test_sets
 from src.functions import set_seed, ensure_directory
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_PLOT
-from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
+from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, build_binary_metrics, plot_training_metric
 import math
 
 from src.modeling.local_resnet50 import (
@@ -51,49 +51,7 @@ model.compile(
         learning_rate=1e-4,
     ),
     loss=tf.keras.losses.BinaryCrossentropy(),
-    metrics=[
-        tf.keras.metrics.BinaryAccuracy(name="accuracy"),
-        tf.keras.metrics.AUC(
-            name="auc",
-            curve="ROC",
-        ),
-        tf.keras.metrics.AUC(
-            name="pr_auc",
-            curve="PR",
-        ),
-        tf.keras.metrics.Recall(
-            name="recall_40",
-            thresholds=0.40,
-        ),
-        tf.keras.metrics.Precision(
-            name="precision_40",
-            thresholds=0.40,
-        ),
-        tf.keras.metrics.Recall(
-            name="recall_45",
-            thresholds=0.45,
-        ),
-        tf.keras.metrics.Precision(
-            name="precision_45",
-            thresholds=0.45,
-        ),
-        tf.keras.metrics.Recall(
-            name="recall_50",
-            thresholds=0.50,
-        ),
-        tf.keras.metrics.Precision(
-            name="precision_50",
-            thresholds=0.50,
-        ),
-        tf.keras.metrics.Recall(
-            name="recall_55",
-            thresholds=0.55,
-        ),
-        tf.keras.metrics.Precision(
-            name="precision_55",
-            thresholds=0.55,
-        ),
-    ],
+    metrics=build_binary_metrics()
 )
 
 head_checkpoint_path = (
@@ -146,30 +104,19 @@ for threshold in [0.35, 0.4, 0.45, 0.5]:
     print(f"threshold : {threshold}, accuracy : {metrics["accuracy"]}, precision : {metrics["precision"]}, recall : {metrics["recall"]}")
 
 # Loss plot
-plt.figure(figsize=(8, 5))
-
-plt.plot(history_head.history["loss"], label="Train loss")
-plt.plot(history_head.history["val_loss"], label="Validation loss")
-
-plt.xlabel("Epoch")
-plt.ylabel("Binary cross-entropy")
-plt.title("Training and validation loss")
-plt.legend()
-plt.grid(True)
-plt.savefig(OUTPUT_PLOT / f"head only - val_loss and loss - {LOCAL_HEIGHT}x{LOCAL_WIDTH} - seed {SEED}.png", dpi=300, bbox_inches="tight")
-plt.close()
+plot_training_metric(
+    history=history_head,
+    metric_name="loss",
+    ylabel="Binary cross-entropy",
+    title="Training and validation loss",
+    output_path=(OUTPUT_PLOT / f"head only - val_loss and loss - {LOCAL_HEIGHT}x{LOCAL_WIDTH} - seed {SEED}.png")
+)
 
 # AUC plot
-plt.figure(figsize=(8, 5))
-
-plt.plot(history_head.history["auc"], label="Train AUC")
-plt.plot(history_head.history["val_auc"], label="Validation AUC")
-
-plt.xlabel("Epoch")
-plt.ylabel("AUC")
-plt.title("Training and validation AUC")
-plt.legend()
-plt.grid(True)
-plt.savefig(OUTPUT_PLOT / f"head only - val_auc and auc - {LOCAL_HEIGHT}x{LOCAL_WIDTH} - seed {SEED}.png", dpi=300, bbox_inches="tight")
-plt.close()
-
+plot_training_metric(
+    history=history_head,
+    metric_name="auc",
+    ylabel="AUC",
+    title="Training and validation AUC",
+    output_path=(OUTPUT_PLOT / f"head only - val_auc and auc - {LOCAL_HEIGHT}x{LOCAL_WIDTH} - seed {SEED}.png")
+)

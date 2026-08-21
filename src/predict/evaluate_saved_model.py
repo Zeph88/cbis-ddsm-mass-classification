@@ -16,7 +16,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY
+from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, THRESHOLDS
 
 from src.functions import set_seed, ensure_directory
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
@@ -73,16 +73,7 @@ MODEL_PATHS = {
 }
 
 
-THRESHOLDS = [
-    RETAINED_THRESHOLD,
-    0.35,
-    0.40,
-    0.45,
-    0.50,
-    0.55,
-    0.60,
-    0.65,
-]
+ALL_THRESHOLDS = THRESHOLDS.append(OPTIMAL_THRESHOLDS)
 
 
 EVALUATION_BATCH_SIZE = 1
@@ -730,7 +721,7 @@ print(f"Probability range: {y_prob.min():.4f}–{y_prob.max():.4f}, mean: {y_pro
 print(f"AUC: {metrics['auc']:.4f}, PR-AUC: {metrics['ap']:.4f}, BCE: {metrics['bce']:.4f}, Brier: {metrics['brier']:.4f}")
 
 
-for threshold in THRESHOLDS:
+for threshold in ALL_THRESHOLDS:
     
     metrics = calculate_metrics(y_true, y_prob, threshold)
 

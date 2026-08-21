@@ -3,7 +3,7 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow.keras import layers, models, datasets
 import matplotlib.pyplot as plt
-from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
+from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, plot_training_metric
 from src.training.dataset_preparation import cnn_steps, train_val_test_sets
 from src.functions import set_seed, ensure_directory
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, GLOBAL_HEIGHT, GLOBAL_WIDTH, OUTPUT_PLOT
@@ -53,53 +53,9 @@ model = build_global_model(
 )
 
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(
-        learning_rate=1e-4,
-    ),
+    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
     loss=tf.keras.losses.BinaryCrossentropy(),
-    metrics=[
-        tf.keras.metrics.BinaryAccuracy(name="accuracy"),
-        tf.keras.metrics.AUC(
-            name="auc",
-            curve="ROC",
-        ),
-        tf.keras.metrics.AUC(
-            name="pr_auc",
-            curve="PR",
-        ),
-        tf.keras.metrics.Recall(
-            name="recall_40",
-            thresholds=0.40,
-        ),
-        tf.keras.metrics.Precision(
-            name="precision_40",
-            thresholds=0.40,
-        ),
-        tf.keras.metrics.Recall(
-            name="recall_45",
-            thresholds=0.45,
-        ),
-        tf.keras.metrics.Precision(
-            name="precision_45",
-            thresholds=0.45,
-        ),
-        tf.keras.metrics.Recall(
-            name="recall_50",
-            thresholds=0.50,
-        ),
-        tf.keras.metrics.Precision(
-            name="precision_50",
-            thresholds=0.50,
-        ),
-        tf.keras.metrics.Recall(
-            name="recall_55",
-            thresholds=0.55,
-        ),
-        tf.keras.metrics.Precision(
-            name="precision_55",
-            thresholds=0.55,
-        ),
-    ],
+    metrics=build_binary_metrics()
 )
 
 model.summary()
@@ -189,64 +145,19 @@ gc.collect()
 
 
 # Loss plot
-plt.figure(figsize=(8, 5))
-
-plt.plot(
-    history_values["loss"],
-    label="Train loss",
+plot_training_metric(
+    history=history_values,
+    metric_name="loss",
+    ylabel="Binary cross-entropy",
+    title="Training and validation loss",
+    output_path=(OUTPUT_PLOT / f"global head only - val_loss and loss - {GLOBAL_HEIGHT}x{GLOBAL_WIDTH} - seed {SEED}.png")
 )
-
-plt.plot(
-    history_values["val_loss"],
-    label="Validation loss",
-)
-
-plt.xlabel("Epoch")
-plt.ylabel("Binary cross-entropy")
-plt.title("Training and validation loss")
-plt.legend()
-plt.grid(True)
-
-plt.savefig(
-    OUTPUT_PLOT
-    / (
-        "global head only - val_loss and loss - "
-        f"{GLOBAL_HEIGHT}x{GLOBAL_WIDTH} - seed {SEED}.png"
-    ),
-    dpi=300,
-    bbox_inches="tight",
-)
-
-plt.close()
-
 
 # AUC plot
-plt.figure(figsize=(8, 5))
-
-plt.plot(
-    history_values["auc"],
-    label="Train AUC",
+plot_training_metric(
+    history=history_values,
+    metric_name="auc",
+    ylabel="AUC",
+    title="Training and validation AUC",
+    output_path=(OUTPUT_PLOT / f"global head only - val_auc and auc - {GLOBAL_HEIGHT}x{GLOBAL_WIDTH} - seed {SEED}.png")
 )
-
-plt.plot(
-    history_values["val_auc"],
-    label="Validation AUC",
-)
-
-plt.xlabel("Epoch")
-plt.ylabel("AUC")
-plt.title("Training and validation AUC")
-plt.legend()
-plt.grid(True)
-
-plt.savefig(
-    OUTPUT_PLOT
-    / (
-        "global head only - val_auc and auc - "
-        f"{GLOBAL_HEIGHT}x{GLOBAL_WIDTH} - seed {SEED}.png"
-    ),
-    dpi=300,
-    bbox_inches="tight",
-)
-
-plt.close()

@@ -5,6 +5,7 @@ from src.config import SEED, SPLITS_DIR
 import random
 import tensorflow as tf
 import pandas as pd
+import argparse
 
 def set_seed(seed=SEED):
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -45,3 +46,39 @@ def load_data(*paths):
         if not path.exists():
             raise FileNotFoundError(f"Missing global index: {path}")
     return files
+
+def parse_arguments(
+    description,
+    arguments=None,
+    exclusive_arguments=None,
+    exclusive_required=False,
+):
+    parser = argparse.ArgumentParser(
+        description=description
+    )
+
+    if arguments:
+        for argument in arguments:
+            argument = argument.copy()
+            name = argument.pop("name")
+
+            parser.add_argument(
+                name,
+                **argument,
+            )
+
+    if exclusive_arguments:
+        group = parser.add_mutually_exclusive_group(
+            required=exclusive_required
+        )
+
+        for argument in exclusive_arguments:
+            argument = argument.copy()
+            name = argument.pop("name")
+
+            group.add_argument(
+                name,
+                **argument,
+            )
+
+    return parser.parse_args()

@@ -1,4 +1,3 @@
-import argparse
 import gc
 
 import numpy as np
@@ -6,7 +5,7 @@ import pandas as pd
 import tensorflow as tf
 
 from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
-from src.functions import load_data
+from src.functions import load_data, parse_arguments
 from src.config import BATCH_SIZE, GLOBAL_HEIGHT, GLOBAL_WIDTH, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_MODEL, OUTPUT_NPY, SEED, N_OUTER_FOLDS, MAMMOGRAM_KEY
 from src.training.dataset_preparation import build_tf_dataset
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
@@ -243,21 +242,32 @@ def generate_fold_predictions(fold, local_index, global_index, overwrite=False):
     print("Global:", global_scores)
     print(f"Saved to {output_path}")
 
-
-# CLI
-def parse_args():
-    parser = argparse.ArgumentParser(description=("Generate local/global OOF probabilities from already-trained CV checkpoints."))
-    group = (parser.add_mutually_exclusive_group(required=True))
-    group.add_argument("--fold", type=int, choices=range(N_OUTER_FOLDS), help=("Generate branch OOF predictions for one outer fold."))
-    group.add_argument("--all", action="store_true", help=("Generate branch OOF predictions for all outer folds."))
-    parser.add_argument("--overwrite", action="store_true", help=("Overwrite an existing branch_oof_predictions.csv."))
-
-    return parser.parse_args()
-
-
 def main():
 
-    args = parse_args()
+    args = parse_arguments(
+        description=("Generate local/global OOF probabilities from already-trained CV checkpoints."),
+        arguments=[
+            {
+                "name": "--overwrite",
+                "action": "store_true",
+                "help": ("Overwrite an existing branch_oof_predictions.csv.")
+            }
+        ],
+        exclusive_arguments=[
+            {
+                "name": "--fold",
+                "type": int,
+                "choices": range(N_OUTER_FOLDS),
+                "help": ("Generate branch OOF predictions for one outer fold.")
+            },
+            {
+                "name": "--all",
+                "action": "store_true",
+                "help": ("Generate branch OOF predictions for all outer folds.")
+            }
+        ],
+        exclusive_required=True,
+    )
     local_index, global_index = (load_preprocessed_indexes())
 
     if args.all:
