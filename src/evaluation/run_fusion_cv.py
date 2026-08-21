@@ -266,42 +266,6 @@ def build_single_input_datasets(
         val_ds,
     )
 
-def build_paired_dataframe(
-    local_df,
-    global_df,
-):
-    local_df = local_df.copy()
-    global_df = global_df.copy()
-
-    local_df[
-        "local_path"
-    ] = local_df[
-        "preprocessed_image_path"
-    ]
-
-    paired = pair_local_global(
-        local_dataframe=local_df,
-        global_dataframe=global_df,
-        global_extra_columns=[
-            "cv_set",
-        ],
-        global_rename_columns={
-            "cv_set": "global_cv_set",
-        },
-    )
-
-    mismatch = (
-        paired["cv_set"]
-        != paired["global_cv_set"]
-    )
-
-    if mismatch.any():
-        raise RuntimeError(
-            "Local/global partition mismatch."
-        )
-
-    return paired
-
 def build_paired_dataframe(local_df, global_df):
 
     paired = pair_local_global(local_df, global_df, global_extra_columns=["cv_set"], global_rename_columns={"cv_set": "global_cv_set"})

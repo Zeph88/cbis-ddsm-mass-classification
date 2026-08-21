@@ -20,10 +20,7 @@ from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KE
 from src.data.pairing import pair_local_global, validate_columns
 from src.functions import set_seed, ensure_directory, parse_arguments
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
-
-from src.training.dataset_preparation import (
-    train_val_test_sets,
-)
+from src.training.dataset_preparation import train_val_test_sets
 
 
 args = parse_arguments(
@@ -66,13 +63,11 @@ ensure_directory(OUTPUT_PLOT)
 MODEL_TYPE = args.model
 BRANCH = ("fusion" if MODEL_TYPE in {"symmetric", "residual"} else MODEL_TYPE)
 EVALUATION_SCOPE = args.scope
-model_path = MODEL_PATHS[MODEL_TYPE]
 
 LOCAL_MODEL_PATH = (OUTPUT_MODEL / "local_resnet50_head.keras")
 GLOBAL_MODEL_PATH = (OUTPUT_MODEL / "global_resnet50_head.keras")
 SYMMETRIC_FUSION_MODEL_PATH = (OUTPUT_MODEL / f"model_fusion_symmetric_seed_{SEED}.keras")
 RESIDUAL_FUSION_MODEL_PATH = (OUTPUT_MODEL / f"model_fusion_residual_seed_{SEED}.keras")
-
 
 MODEL_PATHS = {
     "local": LOCAL_MODEL_PATH,
@@ -81,6 +76,7 @@ MODEL_PATHS = {
     "residual": RESIDUAL_FUSION_MODEL_PATH
 }
 
+model_path = MODEL_PATHS[MODEL_TYPE]
 ALL_THRESHOLDS = THRESHOLDS + [OPTIMAL_THRESHOLDS]
 
 
