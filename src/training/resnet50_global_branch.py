@@ -43,14 +43,7 @@ gc.collect()
 
 train_steps, val_steps, test_steps = cnn_steps(df)
 
-model = build_global_model(
-    input_shape=(
-        GLOBAL_HEIGHT,
-        GLOBAL_WIDTH,
-        1,
-    ),
-    seed=SEED,
-)
+model = build_global_model(input_shape=(GLOBAL_HEIGHT, GLOBAL_WIDTH, 1), seed=SEED)
 
 model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
@@ -98,7 +91,6 @@ history_values = {
     for metric_name, metric_values in history_head.history.items()
 }
 
-del history_head
 del callbacks_head
 del model
 
@@ -146,7 +138,7 @@ gc.collect()
 
 # Loss plot
 plot_training_metric(
-    history=history_values,
+    history=history_head,
     metric_name="loss",
     ylabel="Binary cross-entropy",
     title="Training and validation loss",
@@ -155,7 +147,7 @@ plot_training_metric(
 
 # AUC plot
 plot_training_metric(
-    history=history_values,
+    history=history_head,
     metric_name="auc",
     ylabel="AUC",
     title="Training and validation AUC",

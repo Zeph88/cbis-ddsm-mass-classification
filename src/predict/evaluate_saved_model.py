@@ -18,7 +18,7 @@ from sklearn.metrics import (
 
 from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, THRESHOLDS, OPTIMAL_THRESHOLDS
 
-from src.functions import set_seed, ensure_directory
+from src.functions import set_seed, ensure_directory, parse_arguments
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
 
 from src.training.dataset_preparation import (
@@ -26,14 +26,36 @@ from src.training.dataset_preparation import (
 )
 
 
+args = parse_arguments(
+    description="Evaluate a saved model.",
+    arguments=[
+        {
+            "name": "--model",
+            "choices": [
+                "local",
+                "global",
+                "symmetric",
+                "residual",
+            ],
+            "required": True,
+        },
+        {
+            "name": "--scope",
+            "choices": [
+                "native",
+                "paired",
+            ],
+            "default": "paired",
+        },
+    ],
+)
+
 # ======================================================================
 # Configuration
 # ======================================================================
 
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
-
-RETAINED_THRESHOLD = 0.265
 
 # Available values:
 #   "local"
@@ -53,24 +75,20 @@ BRANCH = "fusion"
 EVALUATION_SCOPE = "paired"
 
 
-LOCAL_MODEL_PATH = (
-    OUTPUT_MODEL / "local_resnet50_head.keras"
-)
-
-GLOBAL_MODEL_PATH = (
-    OUTPUT_MODEL / "global_resnet50_head.keras"
-)
-
-FUSION_MODEL_PATH = (
-    OUTPUT_MODEL / f"model_fusion_seed_{SEED}.keras"
-)
+LOCAL_MODEL_PATH = (OUTPUT_MODEL / "local_resnet50_head.keras")
+GLOBAL_MODEL_PATH = (OUTPUT_MODEL / "global_resnet50_head.keras")
+SYMMETRIC_FUSION_MODEL_PATH = (OUTPUT_MODEL / f"model_fusion_symmetric_seed_{SEED}.keras")
+RESIDUAL_FUSION_MODEL_PATH = (OUTPUT_MODEL / f"model_fusion_residual_seed_{SEED}.keras")
 
 
 MODEL_PATHS = {
     "local": LOCAL_MODEL_PATH,
     "global": GLOBAL_MODEL_PATH,
-    "fusion": FUSION_MODEL_PATH,
+    "symmetric": SYMMETRIC_FUSION_MODEL_PATH,
+    "residual": RESIDUAL_FUSION_MODEL_PATH
 }
+
+model_path = MODEL_PATHS[args.model]
 
 ALL_THRESHOLDS = THRESHOLDS + [OPTIMAL_THRESHOLDS]
 
@@ -211,8 +229,6 @@ def get_image_dimensions(input_shape):
 # ======================================================================
 # Determine the required input shapes
 # ======================================================================
-
-model_path = MODEL_PATHS[BRANCH]
 
 validate_model_path(model_path)
 
@@ -739,7 +755,7 @@ for threshold in ALL_THRESHOLDS:
 # Confusion matrix at the retained threshold
 # ======================================================================
 
-y_pred_retained = (y_prob >= RETAINED_THRESHOLD).astype(np.int32)
+y_pred_retained = (y_prob >= OPTIMAL_THRESHOLDS).astype(np.int32)
 
 cm = confusion_matrix(y_true, y_pred_retained, labels=[0, 1])
 
@@ -763,7 +779,7 @@ display.plot(
 
 ax.set_title(
     f"Confusion Matrix – Test Set\n"
-    f"Threshold = {RETAINED_THRESHOLD:.3f}"
+    f"Threshold = {OPTIMAL_THRESHOLDS:.3f}"
 )
 
 fig.tight_layout()
