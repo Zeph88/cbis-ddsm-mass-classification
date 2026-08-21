@@ -793,7 +793,7 @@ def main():
     )
     set_seed(SEED)
 
-    dev_meta = load_data(SPLITS_DIR / "train_split.csv", SPLITS_DIR / "val_split.csv", SPLITS_DIR / "test_split.csv")
+    train_meta, val_meta, test_meta = load_data(SPLITS_DIR / "train_split.csv", SPLITS_DIR / "val_split.csv", SPLITS_DIR / "test_split.csv")
     dev_meta = pd.concat([train_meta, val_meta], ignore_index=True)
     dev_meta["patient_id"] = dev_meta["patient_id"].astype(str)
     dev_meta["label"] = dev_meta["label"].astype(int)

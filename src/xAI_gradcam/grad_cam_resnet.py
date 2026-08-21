@@ -20,28 +20,24 @@ ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
 
 args = parse_arguments(
-    description=("Generate local/global OOF probabilities from already-trained CV checkpoints."),
+    description=("Apply Grad-CAM to a local or global ResNet50 mammography model."),
     arguments=[
         {
-            "name": "--overwrite",
-            "action": "store_true",
-            "help": ("Overwrite an existing branch_oof_predictions.csv.")
-        }
-    ],
-    exclusive_arguments=[
-        {
-            "name": "--fold",
-            "type": int,
-            "choices": range(N_OUTER_FOLDS),
-            "help": ("Generate branch OOF predictions for one outer fold.")
+            "name": "--mode",
+            "choices": ["local", "global"],
+            "required": True,
         },
         {
-            "name": "--all",
-            "action": "store_true",
-            "help": ("Generate branch OOF predictions for all outer folds.")
+            "name": "--idx",
+            "type": int,
+            "required": True,
+        },
+        {
+            "name": "--target_class",
+            "choices": ["predicted", "0", "1"],
+            "default": "predicted",
         }
-    ],
-    exclusive_required=True,
+    ]
 )
 
 if args.mode == "local":
@@ -130,63 +126,10 @@ heatmap = make_branch_gradcam_heatmap(
     feature_model=feature_model,
     head_layers=head_layers,
     output_layer=output_layer,
-    target_class=target_class
-)
-
-
-# Prepare visualisations
-
-img = array_npy[0, ..., 0].astype(np.float32)
-
-heatmap_resized = tf.image.resize(
-    heatmap[..., np.newaxis],
-    size=img.shape[:2],
-    method="bilinear",
-).numpy()[..., 0]
-
-heatmap_resized = np.maximum(heatmap_resized, 0)
-heatmap_resized /= (heatmap_resized.max() + 1e-8)
-
-# Ensure the displayed image is in [0, 1].
-img_display = img.copy()
-
-img_min = img_display.min()
-img_max = img_display.max()
-
-if img_max > img_min:
-    img_display = (img_display - img_min) / (img_max - img_min)
-else:
-    img_display = np.zeros_like(img_display)
-
-# Convert grayscale image to RGB
-img_rgb = np.repeat(img_display[..., np.newaxis], repeats=3, axis=-1)
-
-# Convert heatmap to RGB
-cmap = mpl.colormaps["jet"]
-
-heatmap_rgb = cmap(heatmap_resized)[..., :3]
-
-
-# Blend image and Grad-CAM.
-alpha = 0.35
-
-overlay = ((1 - alpha) * img_rgb + alpha * heatmap_rgb)
-
-overlay = np.clip(overlay, 0, 1)
-
-
-# Save figures
-output_prefix = (f"{args.mode}_gradcam_idx_{idx}_true_{true_label}_pred_{pred_label}_target_{target_class}")
-
-# Generate heatmap
-heatmap = make_branch_gradcam_heatmap(
-    img_array=array_npy,
-    feature_model=feature_model,
-    head_layers=head_layers,
-    output_layer=output_layer,
     target_class=target_class,
 )
 
+output_prefix = (f"{args.mode}_gradcam_idx_{idx}_true_{true_label}_pred_{pred_label}_target_{target_class}")
 title_details = (f"True: {true_class} | Pred: {pred_class} | P(malignant): {prob:.4f} | Target: {target_class_name}")
 
 save_gradcam_figures(
@@ -195,6 +138,7 @@ save_gradcam_figures(
     branch_name=args.mode,
     output_prefix=output_prefix,
     title_details=title_details,
-    model_name="ResNet50 Grad-CAM",
+    output_dir=OUTPUT_PLOT,
+    model_name="ResNet50 Grad-CAM"
 )
 

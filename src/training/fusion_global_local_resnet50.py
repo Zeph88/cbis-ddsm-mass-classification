@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from src.functions import set_seed, ensure_directory, load_data, parse_arguments
 from src.training.dataset_preparation import train_val_test_sets
 from src.modeling.fusion import build_residual_fusion, build_symmetric_fusion
-from src.evaluation.evaluation_utils import plot_training_metric
+from src.evaluation.evaluation_utils import plot_training_metric, build_binary_metrics
 
 
 ensure_directory(OUTPUT_MODEL)

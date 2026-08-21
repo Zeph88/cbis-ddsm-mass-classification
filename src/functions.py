@@ -40,11 +40,13 @@ def ensure_directory(path: Path) -> Path:
     return path
 
 def load_data(*paths):
+    
     files = []
     for path in paths:
-        files.append(pd.read_csv(path))
         if not path.exists():
-            raise FileNotFoundError(f"Missing global index: {path}")
+            raise FileNotFoundError(f"Missing file: {path}")
+        files.append(pd.read_csv(path))
+
     return files
 
 def parse_arguments(

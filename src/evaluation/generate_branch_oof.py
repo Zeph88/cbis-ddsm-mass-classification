@@ -215,10 +215,10 @@ def generate_fold_predictions(fold, local_index, global_index, overwrite=False):
     y_true = outer_df["label"].astype(np.int32).to_numpy()
 
     # sanity-check metrics
-    if not np.array_equal(local_true, expected_labels):
+    if not np.array_equal(local_true, y_true):
         raise RuntimeError("Local dataset labels do not match outer metadata.")
 
-    if not np.array_equal(global_true, expected_labels):
+    if not np.array_equal(global_true, y_true):
         raise RuntimeError("Global dataset labels do not match outer metadata.")
 
     # Create exactly the file expected by analyse_oof.py

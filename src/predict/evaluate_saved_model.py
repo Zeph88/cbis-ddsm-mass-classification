@@ -16,7 +16,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, THRESHOLDS
+from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, THRESHOLDS, OPTIMAL_THRESHOLDS
 
 from src.functions import set_seed, ensure_directory
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
@@ -72,8 +72,7 @@ MODEL_PATHS = {
     "fusion": FUSION_MODEL_PATH,
 }
 
-
-ALL_THRESHOLDS = THRESHOLDS.append(OPTIMAL_THRESHOLDS)
+ALL_THRESHOLDS = THRESHOLDS + [OPTIMAL_THRESHOLDS]
 
 
 EVALUATION_BATCH_SIZE = 1

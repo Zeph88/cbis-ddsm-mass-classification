@@ -44,9 +44,7 @@ args = parse_arguments(
 )
 
 # Adjust this path only if the residual checkpoint uses another filename.
-RESIDUAL_MODEL_PATH = (
-    OUTPUT_MODEL / f"model_fusion_seed_{SEED}.keras"
-)
+RESIDUAL_MODEL_PATH = (OUTPUT_MODEL / f"model_fusion_residual_seed_{SEED}.keras")
 
 LOCAL_EMBEDDING_LAYER_NAME = "mammography_adapter"
 GLOBAL_EMBEDDING_LAYER_NAME = "mammography_adapter_relu"
