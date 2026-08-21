@@ -1,17 +1,14 @@
 import gc
 import os
-
-os.environ["KERAS_BACKEND"] = "tensorflow"
-
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 
 from src.functions import ensure_directory, load_data, parse_arguments
-from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, IMAGES_ROOT, MAMMOGRAM_KEY
+from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, IMAGES_ROOT, MAMMOGRAM_KEY, OPTIMAL_THRESHOLDS
 from src.preprocessing.dicom_handling import read_dicom_as_array
 from src.preprocessing.dataset_preprocessing import orient_by_breast_mass
-
+from src.data.pairing import pair_local_global, validate_columns
 from src.xAI_gradcam.gradcam_utils import (
     apply_layers_inference,
     build_resnet_feature_model,
@@ -20,7 +17,10 @@ from src.xAI_gradcam.gradcam_utils import (
     load_single_channel_image,
     make_gradcam_heatmap,
     save_gradcam_figures,
+    get_layers_between
 )
+
+os.environ["KERAS_BACKEND"] = "tensorflow"
 
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
@@ -44,14 +44,11 @@ args = parse_arguments(
 )
 
 # Adjust this path only if the residual checkpoint uses another filename.
-RESIDUAL_MODEL_PATH = (OUTPUT_MODEL / f"model_fusion_residual_seed_{SEED}.keras")
-
+RESIDUAL_MODEL_PATH = OUTPUT_MODEL / f"model_fusion_residual_seed_{SEED}.keras"
 LOCAL_EMBEDDING_LAYER_NAME = "mammography_adapter"
 GLOBAL_EMBEDDING_LAYER_NAME = "mammography_adapter_relu"
-
 LOCAL_EXTRACTOR_NAME = "local_residual_feature_extractor"
 GLOBAL_EXTRACTOR_NAME = "global_residual_feature_extractor"
-
 LOCAL_BASELINE_LOGIT_LAYER_NAME = "frozen_local_baseline_logit"
 LOCAL_NORMALIZATION_LAYER_NAME = "local_embedding_normalization"
 GLOBAL_NORMALIZATION_LAYER_NAME = "global_embedding_normalization"
@@ -63,220 +60,48 @@ CORRECTION_DROPOUT_LAYER_NAME = "contextual_correction_dropout"
 CORRECTION_OUTPUT_LAYER_NAME = "contextual_logit_correction"
 FINAL_LOGIT_LAYER_NAME = "local_logit_plus_contextual_correction"
 FINAL_OUTPUT_LAYER_NAME = "residual_fusion_output"
+GRADCAM_OUTPUT_DIR = OUTPUT_PLOT / "residual_fusion_gradcam"
 
-# Index within the paired test dataframe.
+# Index within the paired test dataframe + target class.
 SAMPLE_INDEX = args.idx
-
-# "predicted" explains the model's predicted class.
-# Use 1 to explain malignant evidence or 0 to explain benign evidence.
 TARGET_CLASS = args.target_class
-
-DECISION_THRESHOLD = 0.265
 HEATMAP_ALPHA = 0.35
-
-GRADCAM_OUTPUT_DIR = (
-    OUTPUT_PLOT / "residual_fusion_gradcam"
-)
-
-
-# ======================================================================
-# Initial cleanup
-# ======================================================================
 
 tf.keras.backend.clear_session()
 gc.collect()
 
-GRADCAM_OUTPUT_DIR.mkdir(
-    parents=True,
-    exist_ok=True,
-)
-
-
-# ======================================================================
-# Utility functions
-# ======================================================================
-
-def get_layers_between(
-    model,
-    start_layer,
-    end_layer,
-    include_end=True,
-):
-    """Return the sequential layers located after start and up to end."""
-
-    start_position = model.layers.index(
-        start_layer
-    )
-
-    end_position = model.layers.index(
-        end_layer
-    )
-
-    if end_position <= start_position:
-        raise ValueError(
-            f"Layer '{end_layer.name}' must occur after "
-            f"'{start_layer.name}' in model '{model.name}'."
-        )
-
-    stop_position = (
-        end_position + 1
-        if include_end
-        else end_position
-    )
-
-    return model.layers[
-        start_position + 1 : stop_position
-    ]
-
+GRADCAM_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def build_paired_test_dataframe(local_index_path, global_index_path):
 
     local_df, global_df = load_data(local_index_path, global_index_path)
 
-    required_local_columns = (
-        MAMMOGRAM_KEY
-        + [
-            "preprocessed_image_path",
-            "resolved_image_file_path",
-            "resolved_roi_rel_path",
-            "label",
-        ]
-    )
+    validate_columns(local_df, ["resolved_image_file_path", "resolved_roi_rel_path", "label"], "local dataframe")
 
-    required_global_columns = (
-        MAMMOGRAM_KEY
-        + [
-            "preprocessed_image_path",
-        ]
-    )
-
-    missing_local_columns = [
-        column
-        for column in required_local_columns
-        if column not in local_df.columns
-    ]
-
-    missing_global_columns = [
-        column
-        for column in required_global_columns
-        if column not in global_df.columns
-    ]
-
-    if missing_local_columns:
-        raise ValueError(
-            "Missing local columns: "
-            f"{missing_local_columns}"
-        )
-
-    if missing_global_columns:
-        raise ValueError(
-            "Missing global columns: "
-            f"{missing_global_columns}"
-        )
-
-    # Grad-CAM examples are selected from the held-out test subset.
+    # Grad-CAM examples
     if "set" in local_df.columns:
-        local_df = local_df[
-            local_df["set"] == "test"
-        ].copy()
+        local_df = local_df[local_df["set"] == "test"].copy()
     else:
         local_df = local_df.copy()
 
     if "set" in global_df.columns:
-        global_df = global_df[
-            global_df["set"] == "test"
-        ].copy()
+        global_df = global_df[global_df["set"] == "test"].copy()
     else:
         global_df = global_df.copy()
 
-    local_df["local_path"] = local_df[
-        "preprocessed_image_path"
-    ]
+    # For Grad-CAM / ROI workflow.
+    local_df["original_image_path"] = (local_df["resolved_image_file_path"])
+    local_df["roi_mask_path"] = (local_df["resolved_roi_rel_path"])
+    paired_df = pair_local_global(local_df, global_df)
 
-    local_df["original_image_path"] = local_df[
-        "resolved_image_file_path"
-    ]
-
-    local_df["roi_mask_path"] = local_df[
-        "resolved_roi_rel_path"
-    ]
-
-    global_path_count = (
-        global_df
-        .groupby(MAMMOGRAM_KEY)[
-            "preprocessed_image_path"
-        ]
-        .nunique()
-    )
-
-    conflicting_global_paths = global_path_count[
-        global_path_count > 1
-    ]
-
-    if not conflicting_global_paths.empty:
-        raise ValueError(
-            "Some mammogram keys refer to several global image paths:\n"
-            f"{conflicting_global_paths.head()}"
-        )
-
-    global_lookup = (
-        global_df[
-            MAMMOGRAM_KEY
-            + ["preprocessed_image_path"]
-        ]
-        .drop_duplicates(
-            subset=MAMMOGRAM_KEY
-        )
-        .rename(
-            columns={
-                "preprocessed_image_path": "global_path"
-            }
-        )
-    )
-
-    paired_df = local_df.merge(
-        global_lookup,
-        on=MAMMOGRAM_KEY,
-        how="inner",
-        validate="many_to_one",
-    )
-
-    if paired_df.empty:
-        raise ValueError(
-            "No local test lesion could be paired with a global image."
-        )
-
-    return paired_df.reset_index(
-        drop=True
-    )
+    return paired_df.reset_index(drop=True)
 
 
-def evaluate_gradcam_against_roi(
-    heatmap,
-    roi_mask,
-    top_fraction=0.20,
-):
-    """
-    Compare a Grad-CAM heatmap with a binary lesion ROI mask.
+def evaluate_gradcam_against_roi(heatmap, roi_mask, top_fraction=0.20):
 
-    Returns:
-        energy_inside_roi
-        peak_inside_roi
-        dice
-        iou
-        enrichment
-    """
-
-    heatmap = np.asarray(
-        heatmap,
-        dtype=np.float32,
-    )
-
-    roi_mask = np.asarray(
-        roi_mask,
-        dtype=np.float32,
-    )
+    heatmap = np.asarray(heatmap, dtype=np.float32)
+    roi_mask = np.asarray(roi_mask, dtype=np.float32)
 
     if roi_mask.ndim == 3:
         roi_mask = roi_mask[..., 0]
@@ -284,120 +109,51 @@ def evaluate_gradcam_against_roi(
     roi_mask = roi_mask > 0
 
     # Resize Grad-CAM to exactly the ROI-mask dimensions.
-    heatmap_resized = tf.image.resize(
-        heatmap[..., np.newaxis],
-        size=roi_mask.shape[:2],
-        method="bilinear",
-    ).numpy()[..., 0]
-
-    heatmap_resized = np.maximum(
-        heatmap_resized,
-        0,
-    )
-
+    heatmap_resized = tf.image.resize(heatmap[..., np.newaxis], size=roi_mask.shape[:2], method="bilinear").numpy()[..., 0]
+    heatmap_resized = np.maximum(heatmap_resized, 0)
     total_energy = heatmap_resized.sum()
 
     if total_energy > 0:
-        energy_inside_roi = (
-            heatmap_resized[roi_mask].sum()
-            / total_energy
-        )
+        energy_inside_roi = heatmap_resized[roi_mask].sum() / total_energy
     else:
         energy_inside_roi = 0.0
 
-    # Location of maximum Grad-CAM activation.
-    peak_position = np.unravel_index(
-        np.argmax(heatmap_resized),
-        heatmap_resized.shape,
-    )
-
-    peak_inside_roi = bool(
-        roi_mask[peak_position]
-    )
+    peak_position = np.unravel_index(np.argmax(heatmap_resized), heatmap_resized.shape)
+    peak_inside_roi = bool(roi_mask[peak_position])
 
     # Keep the most activated top_fraction of pixels.
-    positive_values = heatmap_resized[
-        heatmap_resized > 0
-    ]
+    positive_values = heatmap_resized[heatmap_resized > 0]
 
     if positive_values.size > 0:
-        threshold = np.quantile(
-            positive_values,
-            1.0 - top_fraction,
-        )
-
-        gradcam_binary = (
-            heatmap_resized >= threshold
-        )
+        threshold = np.quantile(positive_values, 1.0 - top_fraction)
+        gradcam_binary = (heatmap_resized >= threshold)
     else:
-        gradcam_binary = np.zeros_like(
-            heatmap_resized,
-            dtype=bool,
-        )
+        gradcam_binary = np.zeros_like(heatmap_resized, dtype=bool)
 
-    intersection = np.logical_and(
-        gradcam_binary,
-        roi_mask,
-    ).sum()
+    intersection = np.logical_and(gradcam_binary, roi_mask).sum()
 
-    union = np.logical_or(
-        gradcam_binary,
-        roi_mask,
-    ).sum()
-
+    union = np.logical_or(gradcam_binary, roi_mask).sum()
     gradcam_pixels = gradcam_binary.sum()
     roi_pixels = roi_mask.sum()
 
-    dice = (
-        2.0 * intersection
-        / (gradcam_pixels + roi_pixels)
-        if gradcam_pixels + roi_pixels > 0
-        else 0.0
-    )
-
-    iou = (
-        intersection / union
-        if union > 0
-        else 0.0
-    )
-
-    roi_area_fraction = (
-        roi_pixels / roi_mask.size
-    )
-
-    enrichment = (
-        energy_inside_roi / roi_area_fraction
-        if roi_area_fraction > 0
-        else np.nan
-    )
+    dice = 2.0 * intersection / (gradcam_pixels + roi_pixels) if gradcam_pixels + roi_pixels > 0 else 0.0
+    iou = intersection / union if union > 0 else 0.0
+    roi_area_fraction = roi_pixels / roi_mask.size
+    enrichment = energy_inside_roi / roi_area_fraction if roi_area_fraction > 0 else np.nan
 
     return {
-        "energy_inside_roi": float(
-            energy_inside_roi
-        ),
+        "energy_inside_roi": float(energy_inside_roi),
         "peak_inside_roi": peak_inside_roi,
         "dice_top20": float(dice),
         "iou_top20": float(iou),
-        "roi_area_fraction": float(
-            roi_area_fraction
-        ),
-        "enrichment": float(enrichment),
+        "roi_area_fraction": float(roi_area_fraction),
+        "enrichment": float(enrichment)
     }
 
-def resize_mask_with_padding(
-    mask,
-    target_size,
-):
-    """
-    Apply the same aspect-ratio preserving resize and padding
-    as the global mammogram preprocessing, using nearest-neighbour
-    interpolation to preserve the binary ROI mask.
-    """
 
-    mask = tf.convert_to_tensor(
-        mask,
-        dtype=tf.float32,
-    )
+def resize_mask_with_padding(mask, target_size):
+
+    mask = tf.convert_to_tensor(mask, dtype=tf.float32)
 
     if mask.shape.rank == 2:
         mask = mask[..., tf.newaxis]
@@ -883,7 +639,7 @@ actual_probability = float(
 )
 
 predicted_label = int(
-    actual_probability >= DECISION_THRESHOLD
+    actual_probability >= OPTIMAL_THRESHOLDS
 )
 
 if TARGET_CLASS == "predicted":
@@ -1192,7 +948,7 @@ local_probability = float(
 )
 
 local_predicted_label = int(
-    local_probability >= DECISION_THRESHOLD
+    local_probability >= OPTIMAL_THRESHOLDS
 )
 
 correction_changed_decision = (

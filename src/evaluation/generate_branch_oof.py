@@ -9,6 +9,7 @@ from src.functions import load_data, parse_arguments
 from src.config import BATCH_SIZE, GLOBAL_HEIGHT, GLOBAL_WIDTH, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_MODEL, OUTPUT_NPY, SEED, N_OUTER_FOLDS, MAMMOGRAM_KEY
 from src.training.dataset_preparation import build_tf_dataset
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
+from src.data.pairing import build_global_lookup
 
 CV_ROOT = (OUTPUT_MODEL / f"fusion_cv_{N_OUTER_FOLDS}fold_seed_{SEED}")
 FOLDS_DIR = CV_ROOT / "folds"
@@ -106,15 +107,8 @@ def build_outer_dataframe(fold, local_index, global_index):
 
     # GLOBAL IMAGE PATH
     global_lookup_source = (global_index[global_index["patient_id"].isin(outer_patients)].copy())
-    global_path_count = (global_lookup_source.groupby(MAMMOGRAM_KEY)["preprocessed_image_path"].nunique())
-    conflicting_global_paths = (global_path_count[global_path_count > 1])
-
-    if not conflicting_global_paths.empty:
-        raise RuntimeError(f"A mammogram key refers to several global image paths: {conflicting_global_paths.head()}")
-
-    global_lookup = (
-        global_lookup_source[MAMMOGRAM_KEY + ["preprocessed_image_path"]].drop_duplicates(subset=MAMMOGRAM_KEY).rename(columns={"preprocessed_image_path": "global_path"}))
-
+    global_lookup = build_global_lookup(global_lookup_source)
+    
     paired_df = paired_df.merge(global_lookup, on=MAMMOGRAM_KEY, how="left", validate="many_to_one", sort=False)
 
     if paired_df["global_path"].isna().any():

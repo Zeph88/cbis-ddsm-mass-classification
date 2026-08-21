@@ -2,19 +2,14 @@
 # Adaptation of code from Keras.io, author F. Chollet
 
 import os
-
-os.environ["KERAS_BACKEND"] = "tensorflow"
-
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-
 from src.functions import ensure_directory, parse_arguments
 from src.config import OUTPUT_NPY, OUTPUT_MODEL, OUTPUT_PLOT, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH, OPTIMAL_THRESHOLDS
-from src.xAI_gradcam.gradcam_utils import build_resnet_feature_model, make_branch_gradcam_heatmap, save_gradcam_figures
+from src.xAI_gradcam.gradcam_utils import build_resnet_feature_model, make_branch_gradcam_heatmap, get_layers_between, save_gradcam_figures
 
+os.environ["KERAS_BACKEND"] = "tensorflow"
 
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
@@ -85,21 +80,15 @@ model.summary()
 
 
 # Build ResNet50 feature-map extractor
-feature_model, resnet_backbone = (build_resnet_feature_model(branch_model=model, model_name=(f"{args.mode}_resnet50_feature_model")))
-
-resnet_position = model.layers.index(resnet_backbone)
+feature_model, resnet_backbone = build_resnet_feature_model(model, f"{args.mode}_resnet50_feature_model")
 
 output_layer = model.layers[-1]
-
-if not isinstance(output_layer, tf.keras.layers.Dense):
-    raise TypeError(f"The last model layer must be a Dense classification layer, but received {type(output_layer).__name__}.")
 
 if output_layer.units != 1:
     raise ValueError("The final Dense layer must contain one binary output unit.")
 
+head_layers = get_layers_between(model=model, start_layer=resnet_backbone, end_layer=output_layer, include_end=False)
 
-# Layers located after ResNet50 and before the final Dense layer. For the local branch, this should include.
-head_layers = model.layers[resnet_position + 1 : -1]
 
 # Calling the model directly avoids the extra predict pipeline.
 prob = float(model(array_npy, training=False).numpy()[0, 0])

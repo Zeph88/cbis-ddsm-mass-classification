@@ -10,6 +10,7 @@ from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEE
 import math
 import gc
 from src.modeling.global_resnet50 import build_global_model
+from src.training.training_utils import callbacks_for
 
 
 tf.keras.backend.clear_session()
@@ -55,41 +56,14 @@ model.summary()
 
 head_checkpoint_path = OUTPUT_MODEL / f"global_resnet50_head.keras"
 
-callbacks_head = [
-    tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss",
-        mode="min",
-        patience=6,
-        restore_best_weights=False,
-    ),
-    tf.keras.callbacks.ModelCheckpoint(
-        head_checkpoint_path,
-        monitor="val_loss",
-        mode="min",
-        save_best_only=True,
-    ),
-    tf.keras.callbacks.ReduceLROnPlateau(
-        monitor="val_loss",
-        mode="min",
-        factor=0.2,
-        patience=3,
-        min_lr=1e-6,
-    ),
-    tf.keras.callbacks.CSVLogger(
-        OUTPUT_MODEL / f"global_resnet50_head.csv"
-    ),
-]
+callbacks_head = callbacks_for(head_checkpoint_path, OUTPUT_MODEL / f"global_resnet50_head.csv")
+
 history_head = model.fit(
     train_ds,
     validation_data=val_ds,
     epochs=EPOCHS,
     callbacks=callbacks_head,
 )
-
-history_values = {
-    metric_name: list(metric_values)
-    for metric_name, metric_values in history_head.history.items()
-}
 
 del callbacks_head
 del model

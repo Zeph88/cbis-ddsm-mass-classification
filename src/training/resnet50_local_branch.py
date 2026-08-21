@@ -7,6 +7,7 @@ from src.training.dataset_preparation import cnn_steps, train_val_test_sets
 from src.functions import set_seed, ensure_directory
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_PLOT
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, build_binary_metrics, plot_training_metric
+from src.training.training_utils import callbacks_for
 import math
 
 from src.modeling.local_resnet50 import (
@@ -58,30 +59,7 @@ head_checkpoint_path = (
     OUTPUT_MODEL / f"local_resnet50_head.keras"
 )
 
-callbacks_head = [
-    tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss",
-        mode="min",
-        patience=6,
-        restore_best_weights=False,
-    ),
-    tf.keras.callbacks.ModelCheckpoint(
-        head_checkpoint_path,
-        monitor="val_loss",
-        mode="min",
-        save_best_only=True,
-    ),
-    tf.keras.callbacks.ReduceLROnPlateau(
-        monitor="val_loss",
-        mode="min",
-        factor=0.2,
-        patience=3,
-        min_lr=1e-6,
-    ),
-    tf.keras.callbacks.CSVLogger(
-        OUTPUT_MODEL / f"local_resnet50_head.csv"
-    ),
-]
+callbacks_head = callbacks_for(head_checkpoint_path, OUTPUT_MODEL / f"local_resnet50_head.csv")
 
 history_head = model.fit(
     train_ds,

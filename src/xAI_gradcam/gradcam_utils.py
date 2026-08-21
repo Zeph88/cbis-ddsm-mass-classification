@@ -7,6 +7,20 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 
+# Return the sequential layers located after start and up to end.
+def get_layers_between(model, start_layer, end_layer, include_end=True):
+    
+    start_position = model.layers.index(start_layer)
+    end_position = model.layers.index(end_layer)
+
+    if end_position <= start_position:
+        raise ValueError(f"Layer '{end_layer.name}' must occur after '{start_layer.name}' in model '{model.name}'.")
+
+    stop_position = (end_position + 1 if include_end else end_position)
+
+    return model.layers[start_position + 1 : stop_position]
+
+
 def get_required_layer(model, layer_name):
 
     try:

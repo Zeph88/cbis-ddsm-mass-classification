@@ -17,7 +17,7 @@ from sklearn.metrics import (
 )
 
 from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, THRESHOLDS, OPTIMAL_THRESHOLDS
-
+from src.data.pairing import pair_local_global, validate_columns
 from src.functions import set_seed, ensure_directory, parse_arguments
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
 
@@ -57,23 +57,16 @@ args = parse_arguments(
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
 
-# Available values:
-#   "local"
-#   "global"
-#   "fusion"
-BRANCH = "fusion"
-
-# Available values:
-#   "paired": evaluate on the local-global fusion subset
-#   "native": evaluate the standalone branch on its original dataset
-#
 # Recommended combinations:
 #   local  + paired  -> fair comparison with fusion
 #   local  + native  -> original local performance
 #   global + native  -> original global performance
 #   fusion + paired  -> fusion performance
-EVALUATION_SCOPE = "paired"
 
+MODEL_TYPE = args.model
+BRANCH = ("fusion" if MODEL_TYPE in {"symmetric", "residual"} else MODEL_TYPE)
+EVALUATION_SCOPE = args.scope
+model_path = MODEL_PATHS[MODEL_TYPE]
 
 LOCAL_MODEL_PATH = (OUTPUT_MODEL / "local_resnet50_head.keras")
 GLOBAL_MODEL_PATH = (OUTPUT_MODEL / "global_resnet50_head.keras")
@@ -87,8 +80,6 @@ MODEL_PATHS = {
     "symmetric": SYMMETRIC_FUSION_MODEL_PATH,
     "residual": RESIDUAL_FUSION_MODEL_PATH
 }
-
-model_path = MODEL_PATHS[args.model]
 
 ALL_THRESHOLDS = THRESHOLDS + [OPTIMAL_THRESHOLDS]
 
@@ -231,7 +222,6 @@ def get_image_dimensions(input_shape):
 # ======================================================================
 
 validate_model_path(model_path)
-
 
 if BRANCH == "fusion":
     model = tf.keras.models.load_model(
@@ -386,161 +376,24 @@ def load_global_index(input_shape):
 # Dataset preparation utilities
 # ======================================================================
 
-def validate_columns(
-    dataframe,
-    required_columns,
-    dataframe_name,
-):
-    """
-    Validate the columns required for prediction.
-    """
 
-    missing_columns = [
-        column
-        for column in required_columns
-        if column not in dataframe.columns
-    ]
+def build_paired_dataframe(local_dataframe, global_dataframe):
 
-    if missing_columns:
-        raise ValueError(
-            f"Missing columns in {dataframe_name}: "
-            f"{missing_columns}"
-        )
+    validate_columns(local_dataframe, ["label"], "local dataframe")
+    initial_local_count = len(local_dataframe)
 
-
-def build_paired_dataframe(
-    local_dataframe,
-    global_dataframe,
-):
-    """
-    Pair every local lesion with its corresponding full mammogram.
-
-    The target remains the label of the local crop.
-    """
-
-    local_dataframe = local_dataframe.copy()
-    global_dataframe = global_dataframe.copy()
-
-    validate_columns(
-        local_dataframe,
-        MAMMOGRAM_KEY
-        + [
-            "preprocessed_image_path",
-            "label",
-        ],
-        "local dataframe",
-    )
-
-    validate_columns(
-        global_dataframe,
-        MAMMOGRAM_KEY
-        + [
-            "preprocessed_image_path",
-        ],
-        "global dataframe",
-    )
-
-    local_dataframe["local_path"] = local_dataframe[
-        "preprocessed_image_path"
-    ]
-
-    # Ensure that one mammogram identity does not point to
-    # several different global files.
-    global_path_count = (
-        global_dataframe
-        .groupby(MAMMOGRAM_KEY)[
-            "preprocessed_image_path"
-        ]
-        .nunique()
-    )
-
-    conflicting_global_paths = global_path_count[
-        global_path_count > 1
-    ]
-
-    if not conflicting_global_paths.empty:
-        raise ValueError(
-            "Some mammogram keys refer to several global paths:\n"
-            f"{conflicting_global_paths.head()}"
-        )
-
-    global_lookup = (
-        global_dataframe[
-            MAMMOGRAM_KEY
-            + [
-                "preprocessed_image_path",
-            ]
-        ]
-        .drop_duplicates(
-            subset=MAMMOGRAM_KEY
-        )
-        .rename(
-            columns={
-                "preprocessed_image_path": "global_path",
-            }
-        )
-    )
-
-    initial_local_count = len(
-        local_dataframe
-    )
-
-    paired_dataframe = local_dataframe.merge(
-        global_lookup,
-        on=MAMMOGRAM_KEY,
-        how="inner",
-        validate="many_to_one",
-    )
-
-    print(
-        "\nInitial local lesion count:",
-        initial_local_count,
-    )
-
-    print(
-        "Successfully paired lesions:",
-        len(paired_dataframe),
-    )
-
-    print(
-        "Unmatched local lesions:",
-        initial_local_count - len(paired_dataframe),
-    )
-
-    if paired_dataframe.empty:
-        raise ValueError(
-            "No local lesion could be paired with a global mammogram."
-        )
+    paired_dataframe = pair_local_global(local_dataframe, global_dataframe)
 
     return paired_dataframe
 
 
-def build_native_dataset(
-    dataframe,
-    input_shape,
-):
-    """
-    Build a dataset for one standalone branch.
-    """
+def build_native_dataset(dataframe, input_shape):
 
     dataframe = dataframe.copy()
 
-    validate_columns(
-        dataframe,
-        [
-            "preprocessed_image_path",
-            "label",
-        ],
-        f"{BRANCH} dataframe",
-    )
-
-    dataframe["prediction_path"] = dataframe[
-        "preprocessed_image_path"
-    ]
-
-    height, width = get_image_dimensions(
-        input_shape
-    )
+    validate_columns(dataframe, ["preprocessed_image_path", "label"], f"{BRANCH} dataframe")
+    dataframe["prediction_path"] = dataframe["preprocessed_image_path"]
+    height, width = get_image_dimensions(input_shape)
 
     return train_val_test_sets(
         dataframe,

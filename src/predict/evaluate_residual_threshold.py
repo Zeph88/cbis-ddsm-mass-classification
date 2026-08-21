@@ -9,6 +9,7 @@ import tensorflow as tf
 
 from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH
 from src.functions import set_seed, ensure_directory, load_data
+from src.data.pairing import pair_local_global
 from src.training.dataset_preparation import train_val_test_sets
 from src.training.threshold_selection import plot_threshold_metrics, save_selected_threshold, select_threshold_by_youden_j, select_threshold_with_minimum_recall, threshold_grid_search
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
@@ -36,12 +37,7 @@ global_index_path = OUTPUT_NPY / f"dataset_index_full_{GLOBAL_HEIGHT}x{GLOBAL_WI
 
 local_df, global_df = load_data(local_index_path, global_index_path)
 
-local_df = local_df.copy()
-global_df = global_df.copy()
-
-local_df["local_path"] = local_df["preprocessed_image_path"]
-global_lookup = global_df[MAMMOGRAM_KEY + ["preprocessed_image_path"]].drop_duplicates(subset=MAMMOGRAM_KEY).rename(columns={"preprocessed_image_path": "global_path"})
-paired_df = local_df.merge(global_lookup, on=MAMMOGRAM_KEY, how="inner", validate="many_to_one")
+paired_df = pair_local_global(local_dataframe=local_df, global_dataframe=global_df)
 
 train_ds, val_ds, test_ds = train_val_test_sets(
     paired_df,

@@ -13,7 +13,9 @@ from src.modeling.global_resnet50 import build_global_model
 from src.modeling.fusion import build_residual_fusion, build_symmetric_fusion
 from src.functions import ensure_directory, set_seed, load_data, parse_arguments
 from src.training.dataset_preparation import build_tf_dataset
+from src.training.training_utils import callbacks_for
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
+from src.data.pairing import pair_local_global
 
 N_INNER_FOLDS = N_OUTER_FOLDS
 
@@ -277,32 +279,15 @@ def build_paired_dataframe(
         "preprocessed_image_path"
     ]
 
-    global_lookup = (
-        global_df[
-            MAMMOGRAM_KEY
-            + [
-                "preprocessed_image_path",
-                "cv_set",
-            ]
-        ]
-        .drop_duplicates(
-            subset=MAMMOGRAM_KEY
-        )
-        .rename(
-            columns={
-                "preprocessed_image_path":
-                    "global_path",
-                "cv_set":
-                    "global_cv_set",
-            }
-        )
-    )
-
-    paired = local_df.merge(
-        global_lookup,
-        on=MAMMOGRAM_KEY,
-        how="inner",
-        validate="many_to_one",
+    paired = pair_local_global(
+        local_dataframe=local_df,
+        global_dataframe=global_df,
+        global_extra_columns=[
+            "cv_set",
+        ],
+        global_rename_columns={
+            "cv_set": "global_cv_set",
+        },
     )
 
     mismatch = (
@@ -317,97 +302,16 @@ def build_paired_dataframe(
 
     return paired
 
-def build_paired_datasets(
-    paired_df,
-):
-    train_df = paired_df[
-        paired_df["cv_set"]
-        == "train"
-    ]
+def build_paired_dataframe(local_df, global_df):
 
-    val_df = paired_df[
-        paired_df["cv_set"]
-        == "validation"
-    ]
+    paired = pair_local_global(local_df, global_df, global_extra_columns=["cv_set"], global_rename_columns={"cv_set": "global_cv_set"})
+    mismatch = (paired["cv_set"] != paired["global_cv_set"])
 
-    outer_df = paired_df[
-        paired_df["cv_set"]
-        == "outer_evaluation"
-    ]
+    if mismatch.any():
+        raise RuntimeError("Local/global partition mismatch.")
 
-    kwargs = dict(
-        batch_size=BATCH_SIZE,
-        seed=SEED,
-        path_image="local_path",
-        added_path_image="global_path",
-        image_height=LOCAL_HEIGHT,
-        image_width=LOCAL_WIDTH,
-        added_image_height=GLOBAL_HEIGHT,
-        added_image_width=GLOBAL_WIDTH,
-    )
+    return paired
 
-    train_ds = build_tf_dataset(
-        train_df,
-        shuffle=True,
-        **kwargs,
-    )
-
-    val_ds = build_tf_dataset(
-        val_df,
-        shuffle=False,
-        **kwargs,
-    )
-
-    outer_ds = build_tf_dataset(
-        outer_df,
-        shuffle=False,
-        **kwargs,
-    )
-
-    return (
-        train_ds,
-        val_ds,
-        outer_ds,
-        outer_df.reset_index(
-            drop=True
-        ),
-    )
-
-def callbacks_for(
-    checkpoint_path,
-    log_path,
-):
-    return [
-        tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            mode="min",
-            patience=6,
-            restore_best_weights=False,
-        ),
-
-        tf.keras.callbacks.ModelCheckpoint(
-            filepath=str(
-                checkpoint_path
-            ),
-            monitor="val_loss",
-            mode="min",
-            save_best_only=True,
-        ),
-
-        tf.keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss",
-            mode="min",
-            factor=0.2,
-            patience=3,
-            min_lr=1e-6,
-        ),
-
-        tf.keras.callbacks.CSVLogger(
-            filename=str(
-                log_path
-            ),
-        ),
-    ]
 
 def train_branch(
     build_fn,

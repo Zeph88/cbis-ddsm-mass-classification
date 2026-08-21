@@ -16,6 +16,8 @@ from src.functions import set_seed, ensure_directory, load_data, parse_arguments
 from src.training.dataset_preparation import train_val_test_sets
 from src.modeling.fusion import build_residual_fusion, build_symmetric_fusion
 from src.evaluation.evaluation_utils import plot_training_metric, build_binary_metrics
+from src.training.training_utils import callbacks_for
+from src.data.pairing import pair_local_global, validate_columns
 
 
 ensure_directory(OUTPUT_MODEL)
@@ -86,37 +88,11 @@ print("Global index:", global_index_path)
 
 local_df, global_df = load_data(local_index_path, global_index_path)
 
-# Pair every local lesion with its full mammogram
-required_local_columns = MAMMOGRAM_KEY + ["preprocessed_image_path", "label"]
-required_global_columns = MAMMOGRAM_KEY + ["preprocessed_image_path"]
-
-missing_local_columns = [column for column in required_local_columns if column not in local_df.columns]
-missing_global_columns = [column for column in required_global_columns if column not in global_df.columns]
-
-if missing_local_columns:
-    raise ValueError(f"Missing local columns: {missing_local_columns}")
-
-if missing_global_columns:
-    raise ValueError(f"Missing global columns: {missing_global_columns}")
-
-local_df = local_df.copy()
-global_df = global_df.copy()
-
-local_df["local_path"] = local_df["preprocessed_image_path"]
-
-# Confirm that each mammogram key refers to only one full-image path.
-global_path_count = global_df.groupby(MAMMOGRAM_KEY)["preprocessed_image_path"].nunique()
-conflicting_global_paths = global_path_count[global_path_count > 1]
-
-if not conflicting_global_paths.empty:
-    raise ValueError(f"Some mammogram keys refer to several different global image paths: {conflicting_global_paths.head()}")
-
-# This works whether the global index contains one row per mammogram or repeated rows originating from a lesion-level index.
-global_lookup = global_df[MAMMOGRAM_KEY + ["preprocessed_image_path"]].drop_duplicates(subset=MAMMOGRAM_KEY).rename(columns={"preprocessed_image_path": "global_path"})
+validate_columns(local_df, ["label"], "local dataframe")
 
 initial_local_count = len(local_df)
 
-df = local_df.merge(global_lookup, on=MAMMOGRAM_KEY, how="inner", validate="many_to_one")
+df = pair_local_global(local_dataframe=local_df, global_dataframe=global_df)
 
 print("\nInitial local lesion count:", initial_local_count)
 
@@ -248,37 +224,8 @@ print(
 )
 
 
-# ======================================================================
 # Train the fusion head
-# ======================================================================
-
-callbacks = [
-    tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss",
-        mode="min",
-        patience=6,
-        restore_best_weights=True,
-    ),
-
-    tf.keras.callbacks.ModelCheckpoint(
-        FUSION_MODEL_PATH,
-        monitor="val_loss",
-        mode="min",
-        save_best_only=True,
-    ),
-
-    tf.keras.callbacks.ReduceLROnPlateau(
-        monitor="val_loss",
-        mode="min",
-        factor=0.2,
-        patience=3,
-        min_lr=1e-6,
-    ),
-
-    tf.keras.callbacks.CSVLogger(
-        FUSION_LOG_PATH
-    ),
-]
+callbacks = callbacks_for(FUSION_MODEL_PATH, FUSION_LOG_PATH)
 
 history = fusion_model.fit(
     train_ds,
