@@ -1,5 +1,6 @@
 import tensorflow as tf
 from src.evaluation.evaluation_utils import build_binary_metrics
+from src.config import THRESHOLDS
 
 def callbacks_for(checkpoint_path, log_path):
     return [

@@ -9,7 +9,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from sklearn.metrics import average_precision_score, confusion_matrix, ConfusionMatrixDisplay, log_loss, roc_auc_score
 
-from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, THRESHOLDS
+from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, THRESHOLDS, PROJECT_ROOT
 from src.data.pairing import pair_local_global, validate_columns
 from src.functions import set_seed, ensure_directory, parse_arguments, load_json_data
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, validate_model_path
@@ -48,7 +48,7 @@ args = parse_arguments(
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
 
-OPTIMAL_THRESHOLDS = load_json_data(f"residual_threshold_seed_{SEED}.json", "selected_threshold")
+OPTIMAL_THRESHOLDS = load_json_data(PROJECT_ROOT / f"residual_threshold_seed_{SEED}.json", "selected_threshold")
 MODEL_TYPE = args.model
 BRANCH = ("fusion" if MODEL_TYPE in {"symmetric", "residual"} else MODEL_TYPE)
 EVALUATION_SCOPE = args.scope

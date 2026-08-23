@@ -72,20 +72,3 @@ def train_val_test_sets(data, batch_size=BATCH_SIZE, seed=SEED, path_image="prep
 
     return train_ds, val_ds, test_ds
 
-
-def cnn_steps(data):
-
-    train_size = len(data[data["set"]=="train"])
-    val_size = len(data[data["set"]=="validation"])
-    test_size = len(data[data["set"]=="test"])
-
-    train_steps = math.ceil(train_size / BATCH_SIZE)
-    val_steps = math.ceil(val_size / BATCH_SIZE)
-    test_steps = math.ceil(test_size / BATCH_SIZE)
-
-    print(f"Train: {train_size} samples, {train_steps} steps")
-    print(f"Val: {val_size} samples, {val_steps} steps")
-    print(f"Test: {test_size} samples, {test_steps} steps")
-
-    return train_steps, val_steps, test_steps
-

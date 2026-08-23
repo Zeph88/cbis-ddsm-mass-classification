@@ -3,8 +3,8 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow.keras import layers, models, datasets
 import matplotlib.pyplot as plt
-from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, plot_training_metric, build_binary_metrics
-from src.training.dataset_preparation import cnn_steps, train_val_test_sets
+from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, plot_training_metric
+from src.training.dataset_preparation import train_val_test_sets
 from src.functions import set_seed, ensure_directory
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, GLOBAL_HEIGHT, GLOBAL_WIDTH, OUTPUT_PLOT, THRESHOLDS
 import math
@@ -41,8 +41,6 @@ for images, labels in train_ds.take(1):
 
 del images, labels
 gc.collect()
-
-train_steps, val_steps, test_steps = cnn_steps(df)
 
 model = build_global_model(input_shape=(GLOBAL_HEIGHT, GLOBAL_WIDTH, 1), seed=SEED)
 

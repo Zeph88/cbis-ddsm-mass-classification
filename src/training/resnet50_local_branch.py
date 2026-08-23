@@ -3,10 +3,10 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow.keras import layers, models, datasets
 import matplotlib.pyplot as plt
-from src.training.dataset_preparation import cnn_steps, train_val_test_sets
+from src.training.dataset_preparation import train_val_test_sets
 from src.functions import set_seed, ensure_directory
 from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEED, BATCH_SIZE, EPOCHS, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_PLOT, THRESHOLDS
-from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, build_binary_metrics, plot_training_metric
+from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, plot_training_metric
 from src.training.training_utils import callbacks_for, compile_binary_model
 import math
 
@@ -35,8 +35,6 @@ df = pd.read_csv(OUTPUT_NPY / f"dataset_index_{file_path}.csv")
 train_ds, val_ds, test_ds = train_val_test_sets(
     df, BATCH_SIZE, SEED
 )
-
-train_steps, val_steps, test_steps = cnn_steps(df)
 
 model = build_local_model(
     input_shape=(

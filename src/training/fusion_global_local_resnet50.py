@@ -16,7 +16,7 @@ from src.functions import set_seed, ensure_directory, load_data, parse_arguments
 from src.training.dataset_preparation import train_val_test_sets
 from src.modeling.fusion import build_residual_fusion, build_symmetric_fusion
 from src.evaluation.evaluation_utils import plot_training_metric
-from src.training.training_utils import callbacks_for, compile_binary_model, build_binary_metrics
+from src.training.training_utils import callbacks_for, compile_binary_model
 from src.data.pairing import pair_local_global, validate_columns
 
 

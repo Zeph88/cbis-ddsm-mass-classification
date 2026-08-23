@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH
+from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH, PROJECT_ROOT
 from src.functions import set_seed, ensure_directory, load_data
 from src.data.pairing import pair_local_global
 from src.training.dataset_preparation import train_val_test_sets
@@ -20,7 +20,7 @@ ensure_directory(OUTPUT_PLOT)
 
 RESIDUAL_MODEL_PATH = OUTPUT_MODEL / f"model_fusion_residual_seed_{SEED}.keras"
 THRESHOLD_RESULTS_PATH = OUTPUT_MODEL / f"residual_threshold_grid_seed_{SEED}.csv"
-SELECTED_THRESHOLD_PATH = f"residual_threshold_seed_{SEED}.json"
+SELECTED_THRESHOLD_PATH = PROJECT_ROOT / f"residual_threshold_seed_{SEED}.json"
 THRESHOLD_PLOT_PATH = OUTPUT_PLOT / f"residual_threshold_metrics_seed_{SEED}.png"
 
 MINIMUM_RECALL = 0.85
