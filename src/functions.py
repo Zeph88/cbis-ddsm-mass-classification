@@ -86,6 +86,8 @@ def parse_arguments(
 
     return parser.parse_args()
 
-def load_json_data(path, info):
-    data = json.loads(path)
-    return data[info]
+def load_json_data(path, key):
+    with path.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+
+    return data[key]

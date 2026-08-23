@@ -6,14 +6,14 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from src.functions import ensure_directory, parse_arguments, load_json_data
-from src.config import OUTPUT_NPY, OUTPUT_MODEL, OUTPUT_PLOT, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH
+from src.config import SEED, OUTPUT_NPY, OUTPUT_MODEL, OUTPUT_PLOT, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH
 from src.xAI_gradcam.gradcam_utils import build_resnet_feature_model, make_branch_gradcam_heatmap, get_layers_between, save_gradcam_figures
 
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
-OPTIMAL_THRESHOLDS = load_json_data(f"residual_thresholds_seed_{SEED}.json", "selected_threshold")
+OPTIMAL_THRESHOLDS = load_json_data(f"residual_threshold_seed_{SEED}.json", "selected_threshold")
 
 args = parse_arguments(
     description=("Apply Grad-CAM to a local or global ResNet50 mammography model."),

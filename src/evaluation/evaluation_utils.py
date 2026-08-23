@@ -3,8 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
-from src.config import OUTPUT_MODEL, SEED, N_BOOTSTRAP, N_CALIBRATION_BINS, ARCHITECTURES, N_OUTER_FOLDS, THRESHOLDS
-from src.functions import ensure_directory
+from src.config import OUTPUT_MODEL, SEED, N_BOOTSTRAP, N_CALIBRATION_BINS, ARCHITECTURES, N_OUTER_FOLDS, THRESHOLDS, OUTPUT_NPY, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH
+from src.functions import ensure_directory, load_data
 
 
 # Configuration

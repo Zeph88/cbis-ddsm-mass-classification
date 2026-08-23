@@ -198,7 +198,7 @@ if args.model == "residual":
     del verification_ds
     gc.collect()
 
-compile_binary_model(fusion_model)
+compile_binary_model(fusion_model, learning_rate=FUSION_LEARNING_RATE)
 
 fusion_model.summary()
 

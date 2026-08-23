@@ -66,7 +66,7 @@ GRADCAM_OUTPUT_DIR = OUTPUT_PLOT / "residual_fusion_gradcam"
 SAMPLE_INDEX = args.idx
 TARGET_CLASS = args.target_class
 HEATMAP_ALPHA = 0.35
-OPTIMAL_THRESHOLDS = load_json_data(f"residual_thresholds_seed_{SEED}.json", "selected_threshold")
+OPTIMAL_THRESHOLDS = load_json_data(f"residual_threshold_seed_{SEED}.json", "selected_threshold")
 
 tf.keras.backend.clear_session()
 gc.collect()

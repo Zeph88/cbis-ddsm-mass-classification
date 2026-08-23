@@ -48,7 +48,7 @@ args = parse_arguments(
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
 
-OPTIMAL_THRESHOLDS = load_json_data(f"residual_thresholds_seed_{SEED}.json", "selected_threshold")
+OPTIMAL_THRESHOLDS = load_json_data(f"residual_threshold_seed_{SEED}.json", "selected_threshold")
 MODEL_TYPE = args.model
 BRANCH = ("fusion" if MODEL_TYPE in {"symmetric", "residual"} else MODEL_TYPE)
 EVALUATION_SCOPE = args.scope
