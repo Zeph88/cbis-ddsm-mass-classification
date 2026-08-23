@@ -6,6 +6,7 @@ import random
 import tensorflow as tf
 import pandas as pd
 import argparse
+import json
 
 def set_seed(seed=SEED):
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -84,3 +85,7 @@ def parse_arguments(
             )
 
     return parser.parse_args()
+
+def load_json_data(path, info):
+    data = json.loads(path)
+    return data[info]

@@ -8,27 +8,11 @@ from sklearn.metrics import average_precision_score, brier_score_loss, log_loss,
 from src.functions import load_data, parse_arguments
 from src.config import BATCH_SIZE, GLOBAL_HEIGHT, GLOBAL_WIDTH, LOCAL_HEIGHT, LOCAL_WIDTH, OUTPUT_MODEL, OUTPUT_NPY, SEED, N_OUTER_FOLDS, MAMMOGRAM_KEY
 from src.training.dataset_preparation import build_tf_dataset
-from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
+from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, load_preprocessed_indexes
 from src.data.pairing import build_global_lookup
 
 CV_ROOT = (OUTPUT_MODEL / f"fusion_cv_{N_OUTER_FOLDS}fold_seed_{SEED}")
 FOLDS_DIR = CV_ROOT / "folds"
-
-# Load preprocessed indexes
-def load_preprocessed_indexes():
-
-    local_path = OUTPUT_NPY / f"dataset_index_zoom_{LOCAL_HEIGHT}x{LOCAL_WIDTH}.csv"
-    global_path = OUTPUT_NPY / f"dataset_index_full_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}.csv"
-
-    local_df, global_df = load_data(local_path, global_path)
-    local_df["patient_id"] = (local_df["patient_id"].astype(str))
-    global_df["patient_id"] = (global_df["patient_id"].astype(str))
-
-    if "label" in local_df.columns:
-        local_df["label"] = (local_df["label"].astype(int))
-
-    return (local_df, global_df)
-
 
 # Recover the exact outer-evaluation observations
 def build_outer_dataframe(fold, local_index, global_index):
@@ -229,8 +213,8 @@ def generate_fold_predictions(fold, local_index, global_index, overwrite=False):
 
     branch_oof.to_csv(output_path, index=False)
 
-    local_scores = (calculate_metrics(y_true, local_probability))
-    global_scores = (calculate_metrics(y_true, global_probability))
+    local_scores = calculate_metrics(y_true, local_probability)
+    global_scores = calculate_metrics(y_true, global_probability)
 
     print("\nLocal:", local_scores)
     print("Global:", global_scores)

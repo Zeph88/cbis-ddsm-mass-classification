@@ -36,7 +36,6 @@ local_index_path = OUTPUT_NPY / f"dataset_index_zoom_{LOCAL_HEIGHT}x{LOCAL_WIDTH
 global_index_path = OUTPUT_NPY / f"dataset_index_full_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}.csv"
 
 local_df, global_df = load_data(local_index_path, global_index_path)
-
 paired_df = pair_local_global(local_dataframe=local_df, global_dataframe=global_df)
 
 train_ds, val_ds, test_ds = train_val_test_sets(
@@ -56,38 +55,21 @@ val_ds = (val_ds.unbatch().batch(1).prefetch(1))
 
 
 residual_model = tf.keras.models.load_model(RESIDUAL_MODEL_PATH, compile=False)
-print("\nLoaded model:", residual_model.name)
-
-
 y_val, probability_val = collect_binary_predictions(model=residual_model, dataset=val_ds)
 
-print("\nValidation observations:", len(y_val))
-print("Validation positives:", int(y_val.sum()))
-print("Validation prevalence:", float(y_val.mean()))
-print("Minimum predicted probability:", float(probability_val.min()))
-print("Maximum predicted probability:", float(probability_val.max()))
-print("Average predicted probability:", float(probability_val.mean()))
-
-
 thresholds = np.arange(0.01, 1.00, 0.005)
-
-threshold_results = threshold_grid_search(y_true=y_val, y_probability=probability_val, thresholds=thresholds)
+threshold_results = threshold_grid_search(y_val, probability_val, thresholds)
 threshold_results.to_csv(THRESHOLD_RESULTS_PATH, index=False)
 
-print("\nThreshold results saved to:", THRESHOLD_RESULTS_PATH)
-
-
 if SELECTION_METHOD == "minimum_recall":
-    selected_row = select_threshold_with_minimum_recall(results=threshold_results, minimum_recall=MINIMUM_RECALL)
+    selected_row = select_threshold_with_minimum_recall(threshold_results, MINIMUM_RECALL)
 elif SELECTION_METHOD == "youden_j":
-    selected_row = select_threshold_by_youden_j(results=threshold_results)
+    selected_row = select_threshold_by_youden_j(threshold_results)
 else:
     raise ValueError("SELECTION_METHOD must be 'minimum_recall' or 'youden_j'.")
 
 
-selected_threshold = float(
-    selected_row["threshold"]
-)
+selected_threshold = float(selected_row["threshold"])
 
 print("\nSelected validation threshold:", selected_threshold)
 
@@ -110,46 +92,14 @@ print(
 )
 
 
-# ======================================================================
 # Save the selected operating point
-# ======================================================================
+save_selected_threshold(selected_row, SELECTED_THRESHOLD_PATH, SELECTION_METHOD, MINIMUM_RECALL if SELECTION_METHOD == "minimum_recall" else None)
+plot_threshold_metrics(threshold_results, selected_threshold, THRESHOLD_PLOT_PATH, "Residual fusion validation metrics across decision thresholds")
 
-save_selected_threshold(
-    selected_row=selected_row,
-    output_path=SELECTED_THRESHOLD_PATH,
-    selection_method=SELECTION_METHOD,
-    minimum_recall=(
-        MINIMUM_RECALL
-        if SELECTION_METHOD == "minimum_recall"
-        else None
-    ),
-)
+print("\nSelected threshold saved to:", SELECTED_THRESHOLD_PATH)
+print("Threshold graph saved to:", THRESHOLD_PLOT_PATH)
 
-plot_threshold_metrics(
-    results=threshold_results,
-    selected_threshold=selected_threshold,
-    output_path=THRESHOLD_PLOT_PATH,
-    title=(
-        "Residual fusion validation metrics "
-        "across decision thresholds"
-    ),
-)
-
-print(
-    "\nSelected threshold saved to:",
-    SELECTED_THRESHOLD_PATH,
-)
-
-print(
-    "Threshold graph saved to:",
-    THRESHOLD_PLOT_PATH,
-)
-
-
-# ======================================================================
-# Cleanup
-# ======================================================================
-
+# Cleaning
 del residual_model
 del val_ds
 

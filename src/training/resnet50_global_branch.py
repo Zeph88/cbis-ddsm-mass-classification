@@ -10,7 +10,7 @@ from src.config import DATASET_INDEX, IMAGES_ROOT, OUTPUT_MODEL, OUTPUT_NPY, SEE
 import math
 import gc
 from src.modeling.global_resnet50 import build_global_model
-from src.training.training_utils import callbacks_for
+from src.training.training_utils import callbacks_for, compile_binary_model
 
 
 tf.keras.backend.clear_session()
@@ -46,11 +46,7 @@ train_steps, val_steps, test_steps = cnn_steps(df)
 
 model = build_global_model(input_shape=(GLOBAL_HEIGHT, GLOBAL_WIDTH, 1), seed=SEED)
 
-model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
-    loss=tf.keras.losses.BinaryCrossentropy(),
-    metrics=build_binary_metrics()
-)
+compile_binary_model(model)
 
 model.summary()
 
@@ -94,17 +90,17 @@ eval_train_ds, eval_val_ds, test_ds_eval = train_val_test_sets(
 )
 
 del eval_train_ds
-del eval_val_ds
+del test_ds_eval
 gc.collect()
 
 
-y_true, y_prob = collect_binary_predictions(model, test_ds_eval)
+y_true, y_prob = collect_binary_predictions(model, eval_val_ds)
 
 for threshold in [0.35, 0.4, 0.45, 0.5]:
     metrics = calculate_metrics(y_true, y_prob, threshold)
     print(f"threshold : {threshold}, accuracy : {metrics["accuracy"]}, precision : {metrics["precision"]}, recall : {metrics["recall"]}")
 
-del test_ds_eval
+del eval_val_ds
 del model
 tf.keras.backend.clear_session()
 gc.collect()

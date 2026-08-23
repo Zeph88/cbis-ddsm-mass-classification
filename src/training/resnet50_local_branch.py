@@ -47,13 +47,7 @@ model = build_local_model(
     seed=SEED,
 )
 
-model.compile(
-    optimizer=tf.keras.optimizers.Adam(
-        learning_rate=1e-4,
-    ),
-    loss=tf.keras.losses.BinaryCrossentropy(),
-    metrics=build_binary_metrics()
-)
+compile_binary_model(model)
 
 head_checkpoint_path = (
     OUTPUT_MODEL / f"local_resnet50_head.keras"
@@ -75,7 +69,7 @@ model = tf.keras.models.load_model(
     compile=False,
 )
 
-y_true, y_prob = collect_binary_predictions(model, test_ds)
+y_true, y_prob = collect_binary_predictions(model, val_ds)
 
 for threshold in [0.35, 0.4, 0.45, 0.5]:
     metrics = calculate_metrics(y_true, y_prob, threshold)

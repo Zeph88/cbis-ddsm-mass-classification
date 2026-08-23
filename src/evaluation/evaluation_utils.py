@@ -147,3 +147,25 @@ def plot_training_metric(history, metric_name, ylabel, title, output_path):
     plt.close()
 
     print(f"Graph saved to: {output_path}")
+
+
+def validate_model_path(model_path):
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model checkpoint not found: {model_path}")
+
+def load_preprocessed_indexes(dev_patient_ids=None):
+    local_path = OUTPUT_NPY / f"dataset_index_zoom_{LOCAL_HEIGHT}x{LOCAL_WIDTH}.csv"
+    global_path = OUTPUT_NPY / f"dataset_index_full_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}.csv"
+    local_df, global_df = load_data(local_path, global_path)
+
+    local_df["patient_id"] = local_df["patient_id"].astype(str)
+    global_df["patient_id"] = global_df["patient_id"].astype(str)
+
+    if "label" in local_df.columns:
+        local_df["label"] = local_df["label"].astype(int)
+
+    if dev_patient_ids is not None:
+        local_df = local_df[local_df["patient_id"].isin(dev_patient_ids)].copy()
+        global_df = global_df[global_df["patient_id"].isin(dev_patient_ids)].copy()
+
+    return local_df, global_df

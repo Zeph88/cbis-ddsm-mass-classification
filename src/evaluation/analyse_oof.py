@@ -223,7 +223,7 @@ def calculate_pooled_metrics(oof_df):
     prevalence = float(y_true.mean())
 
     baseline_probability = np.full(len(y_true), prevalence, dtype=np.float64)
-    baseline_scores = (calculate_metrics(y_true, baseline_probability))
+    baseline_scores = calculate_metrics(y_true, baseline_probability)
 
     rows = []
     for architecture in (ARCHITECTURES):

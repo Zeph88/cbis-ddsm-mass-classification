@@ -1,0 +1,19 @@
+{
+    "selection_set": "validation",
+    "selection_method": "minimum_recall",
+    "selected_threshold": 0.26499999999999996,
+    "validation_metrics": {
+        "accuracy": 0.6877470355731226,
+        "balanced_accuracy": 0.6924327704815509,
+        "precision": 0.6309523809523809,
+        "recall": 0.8617886178861789,
+        "specificity": 0.5230769230769231,
+        "f1": 0.7285223367697594,
+        "youden_j": 0.3848655409631019,
+        "true_negative": 68,
+        "false_positive": 62,
+        "false_negative": 17,
+        "true_positive": 106
+    },
+    "minimum_recall": 0.85
+}

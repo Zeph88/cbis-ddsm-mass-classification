@@ -7,21 +7,19 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import matplotlib.pyplot as plt
+from sklearn.metrics import average_precision_score, confusion_matrix, ConfusionMatrixDisplay, log_loss, roc_auc_score
 
-from sklearn.metrics import (
-    average_precision_score,
-    confusion_matrix,
-    ConfusionMatrixDisplay,
-    log_loss,
-    roc_auc_score,
-)
-
-from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, THRESHOLDS, OPTIMAL_THRESHOLDS
+from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, THRESHOLDS
 from src.data.pairing import pair_local_global, validate_columns
-from src.functions import set_seed, ensure_directory, parse_arguments
-from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions
+from src.functions import set_seed, ensure_directory, parse_arguments, load_json_data
+from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, validate_model_path
 from src.training.dataset_preparation import train_val_test_sets
 
+# Recommended combinations:
+#   local  + paired  -> fair comparison with fusion
+#   local  + native  -> original local performance
+#   global + native  -> original global performance
+#   fusion + paired  -> fusion performance
 
 args = parse_arguments(
     description="Evaluate a saved model.",
@@ -47,19 +45,10 @@ args = parse_arguments(
     ],
 )
 
-# ======================================================================
-# Configuration
-# ======================================================================
-
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
 
-# Recommended combinations:
-#   local  + paired  -> fair comparison with fusion
-#   local  + native  -> original local performance
-#   global + native  -> original global performance
-#   fusion + paired  -> fusion performance
-
+OPTIMAL_THRESHOLDS = load_json_data(f"residual_thresholds_seed_{SEED}.json", "selected_threshold")
 MODEL_TYPE = args.model
 BRANCH = ("fusion" if MODEL_TYPE in {"symmetric", "residual"} else MODEL_TYPE)
 EVALUATION_SCOPE = args.scope
@@ -79,23 +68,19 @@ MODEL_PATHS = {
 model_path = MODEL_PATHS[MODEL_TYPE]
 ALL_THRESHOLDS = THRESHOLDS + [OPTIMAL_THRESHOLDS]
 
-
 EVALUATION_BATCH_SIZE = 1
 
 
-# ======================================================================
 # Configuration validation
-# ======================================================================
-
 VALID_BRANCHES = {
     "local",
     "global",
-    "fusion",
+    "fusion"
 }
 
 VALID_SCOPES = {
     "native",
-    "paired",
+    "paired"
 }
 
 
@@ -104,95 +89,39 @@ EVALUATION_SCOPE = EVALUATION_SCOPE.strip().lower()
 
 
 if BRANCH not in VALID_BRANCHES:
-    raise ValueError(
-        f"Invalid branch: {BRANCH}. "
-        f"Expected one of {sorted(VALID_BRANCHES)}."
-    )
-
+    raise ValueError(f"Invalid branch: {BRANCH}. Expected one of {sorted(VALID_BRANCHES)}.")
 
 if EVALUATION_SCOPE not in VALID_SCOPES:
-    raise ValueError(
-        f"Invalid evaluation scope: {EVALUATION_SCOPE}. "
-        f"Expected one of {sorted(VALID_SCOPES)}."
-    )
-
+    raise ValueError(f"Invalid evaluation scope: {EVALUATION_SCOPE}. Expected one of {sorted(VALID_SCOPES)}.")
 
 if BRANCH == "fusion" and EVALUATION_SCOPE != "paired":
-    raise ValueError(
-        "The fusion model requires EVALUATION_SCOPE='paired'."
-    )
-
+    raise ValueError("The fusion model requires EVALUATION_SCOPE='paired'.")
 
 if BRANCH == "global" and EVALUATION_SCOPE == "paired":
-    print(
-        "\nWARNING:"
-        "\nThe global branch will be evaluated against local lesion labels."
-        "\nThis measures its relevance to lesion classification, not its"
-        "\noriginal mammogram-level performance."
-    )
+    print("\nWARNING: The global branch will be evaluated against local lesion labels. This measures its relevance to lesion classification, not its noriginal mammogram-level performance.")
 
-
-# ======================================================================
 # Initial cleanup
-# ======================================================================
-
 tf.keras.backend.clear_session()
 gc.collect()
 set_seed(SEED)
 
 
-# ======================================================================
-# Model and shape utilities
-# ======================================================================
-
-def validate_model_path(model_path):
-    """
-    Validate that a saved Keras model exists.
-    """
-
-    if not model_path.exists():
-        raise FileNotFoundError(
-            f"Model checkpoint not found: {model_path}"
-        )
-
-
 def validate_single_input_shape(input_shape, model_name):
-    """
-    Validate and return a single image input shape.
-    """
 
     if not isinstance(input_shape, tuple):
-        raise ValueError(
-            f"{model_name} should have one input. "
-            f"Received: {input_shape}"
-        )
+        raise ValueError(f"{model_name} should have one input. Received: {input_shape}")
 
     if len(input_shape) != 4:
-        raise ValueError(
-            f"Unexpected {model_name} input shape: {input_shape}"
-        )
+        raise ValueError(f"Unexpected {model_name} input shape: {input_shape}")
 
     return tuple(input_shape)
 
 
 def inspect_single_model_input_shape(model_path):
-    """
-    Load a model temporarily and return its input shape.
-
-    The temporary model is removed before the prediction model is loaded.
-    """
 
     validate_model_path(model_path)
-
-    temporary_model = tf.keras.models.load_model(
-        model_path,
-        compile=False,
-    )
-
-    input_shape = validate_single_input_shape(
-        temporary_model.input_shape,
-        model_path.name,
-    )
+    temporary_model = tf.keras.models.load_model(model_path, compile=False)
+    input_shape = validate_single_input_shape(temporary_model.input_shape, model_path.name)
 
     del temporary_model
 
@@ -203,181 +132,58 @@ def inspect_single_model_input_shape(model_path):
 
 
 def get_image_dimensions(input_shape):
-    """
-    Extract image height and width from a Keras input shape.
-    """
-
-    return (
-        int(input_shape[1]),
-        int(input_shape[2]),
-    )
+    return int(input_shape[1]), int(input_shape[2])
 
 
-# ======================================================================
 # Determine the required input shapes
-# ======================================================================
-
 validate_model_path(model_path)
 
+
 if BRANCH == "fusion":
-    model = tf.keras.models.load_model(
-        model_path,
-        compile=False,
-    )
+    model = tf.keras.models.load_model(model_path, compile=False)
 
-    if (
-        not isinstance(model.input_shape, list)
-        or len(model.input_shape) != 2
-    ):
-        raise ValueError(
-            "The fusion model should have two inputs. "
-            f"Received: {model.input_shape}"
-        )
+    if not isinstance(model.input_shape, list) or len(model.input_shape) != 2:
+        raise ValueError(f"The fusion model should have two inputs. Received: {model.input_shape}")
 
-    local_input_shape = tuple(
-        model.input_shape[0]
-    )
-
-    global_input_shape = tuple(
-        model.input_shape[1]
-    )
-
+    local_input_shape = tuple(model.input_shape[0])
+    global_input_shape = tuple(model.input_shape[1])
 
 elif BRANCH == "local":
     if EVALUATION_SCOPE == "paired":
-        # The global shape is needed to rebuild the paired dataset.
-        global_input_shape = inspect_single_model_input_shape(
-            GLOBAL_MODEL_PATH
-        )
+        global_input_shape = inspect_single_model_input_shape(GLOBAL_MODEL_PATH)
 
-    model = tf.keras.models.load_model(
-        model_path,
-        compile=False,
-    )
-
-    local_input_shape = validate_single_input_shape(
-        model.input_shape,
-        "local model",
-    )
+    model = tf.keras.models.load_model(model_path, compile=False)
+    local_input_shape = validate_single_input_shape(model.input_shape, "local model")
 
 
 elif BRANCH == "global":
     if EVALUATION_SCOPE == "paired":
-        # The local shape is needed to rebuild the paired dataset.
-        local_input_shape = inspect_single_model_input_shape(
-            LOCAL_MODEL_PATH
-        )
+        local_input_shape = inspect_single_model_input_shape(LOCAL_MODEL_PATH)
 
-    model = tf.keras.models.load_model(
-        model_path,
-        compile=False,
-    )
-
-    global_input_shape = validate_single_input_shape(
-        model.input_shape,
-        "global model",
-    )
+    model = tf.keras.models.load_model(model_path, compile=False)
+    global_input_shape = validate_single_input_shape(model.input_shape, "global model")
 
 
-print(
-    f"\nLoaded branch: {BRANCH}"
-)
-
-print(
-    f"Evaluation scope: {EVALUATION_SCOPE}"
-)
-
-print(
-    f"Model path: {model_path}"
-)
-
-
-if BRANCH in {"local", "fusion"}:
-    print(
-        "Local input shape:",
-        local_input_shape,
-    )
-
-
-if BRANCH in {"global", "fusion"}:
-    print(
-        "Global input shape:",
-        global_input_shape,
-    )
-
-
-# ======================================================================
 # Index loading utilities
-# ======================================================================
-
-def load_local_index(input_shape):
-    """
-    Load the local crop index matching the model input resolution.
-    """
-
-    height, width = get_image_dimensions(
-        input_shape
-    )
-
-    index_path = (
-        OUTPUT_NPY
-        / f"dataset_index_zoom_{height}x{width}.csv"
-    )
+def load_index(input_shape, zoom_to_roi):
+    height, width = get_image_dimensions(input_shape)
+    if zoom_to_roi:
+        index_path = OUTPUT_NPY / f"dataset_index_zoom_{height}x{width}.csv"
+        word = "Local"
+    else:
+        index_path = (OUTPUT_NPY / f"dataset_index_full_{height}x{width}.csv")
+        word = "Global"
 
     if not index_path.exists():
-        raise FileNotFoundError(
-            f"Local dataset index not found: {index_path}"
-        )
-
-    print(
-        "\nLocal index:",
-        index_path,
-    )
-
-    return pd.read_csv(
-        index_path
-    )
+        raise FileNotFoundError(f"{word} dataset index not found: {index_path}")
+    return pd.read_csv(index_path)
 
 
-def load_global_index(input_shape):
-    """
-    Load the global mammogram index matching the model input resolution.
-    """
-
-    height, width = get_image_dimensions(
-        input_shape
-    )
-
-    index_path = (
-        OUTPUT_NPY
-        / f"dataset_index_full_{height}x{width}.csv"
-    )
-
-    if not index_path.exists():
-        raise FileNotFoundError(
-            f"Global dataset index not found: {index_path}"
-        )
-
-    print(
-        "\nGlobal index:",
-        index_path,
-    )
-
-    return pd.read_csv(
-        index_path
-    )
-
-
-# ======================================================================
 # Dataset preparation utilities
-# ======================================================================
-
-
 def build_paired_dataframe(local_dataframe, global_dataframe):
 
     validate_columns(local_dataframe, ["label"], "local dataframe")
     initial_local_count = len(local_dataframe)
-
     paired_dataframe = pair_local_global(local_dataframe, global_dataframe)
 
     return paired_dataframe
@@ -399,22 +205,10 @@ def build_native_dataset(dataframe, input_shape):
     )
 
 
-def build_paired_dataset(
-    paired_dataframe,
-    local_shape,
-    global_shape,
-):
-    """
-    Build a dataset returning local-global image pairs.
-    """
-
-    local_height, local_width = get_image_dimensions(
-        local_shape
-    )
-
-    global_height, global_width = get_image_dimensions(
-        global_shape
-    )
+def build_paired_dataset(paired_dataframe, local_shape, global_shape):
+    
+    local_height, local_width = get_image_dimensions(local_shape)
+    global_height, global_width = get_image_dimensions(global_shape)
 
     return train_val_test_sets(
         paired_dataframe,
@@ -426,58 +220,23 @@ def build_paired_dataset(
         added_image_width=global_width,
     )
 
-
-# ======================================================================
 # Build the requested dataset
-# ======================================================================
-
 if EVALUATION_SCOPE == "paired":
-    local_df = load_local_index(
-        local_input_shape
-    )
-
-    global_df = load_global_index(
-        global_input_shape
-    )
-
-    prediction_df = build_paired_dataframe(
-        local_df,
-        global_df,
-    )
-
-    train_ds, val_ds, test_ds = build_paired_dataset(
-        prediction_df,
-        local_input_shape,
-        global_input_shape,
-    )
-
+    local_df = load_index(local_input_shape, True)
+    global_df = load_index(global_input_shape, False)
+    prediction_df = build_paired_dataframe(local_df, global_df)
+    train_ds, val_ds, test_ds = build_paired_dataset(prediction_df, local_input_shape, global_input_shape)
 
 elif BRANCH == "local":
-    local_df = load_local_index(
-        local_input_shape
-    )
-
-    train_ds, val_ds, test_ds = build_native_dataset(
-        local_df,
-        local_input_shape,
-    )
-
+    local_df = load_index(local_input_shape, True)
+    train_ds, val_ds, test_ds = build_native_dataset(local_df, local_input_shape)
 
 elif BRANCH == "global":
-    global_df = load_global_index(
-        global_input_shape
-    )
-
-    train_ds, val_ds, test_ds = build_native_dataset(
-        global_df,
-        global_input_shape,
-    )
-
+    global_df = load_index(global_input_shape, False)
+    train_ds, val_ds, test_ds = build_native_dataset(global_df, global_input_shape)
 
 else:
-    raise RuntimeError(
-        "Unsupported dataset configuration."
-    )
+    raise RuntimeError("Unsupported dataset configuration.")
 
 
 # Training and validation datasets are unnecessary for prediction.
@@ -487,41 +246,15 @@ del val_ds
 gc.collect()
 
 
-# ======================================================================
 # Rebatch for memory-safe inference
-# ======================================================================
+test_ds_eval = test_ds.unbatch().batch(EVALUATION_BATCH_SIZE, drop_remainder=False).prefetch(1)
 
-test_ds_eval = (
-    test_ds
-    .unbatch()
-    .batch(
-        EVALUATION_BATCH_SIZE,
-        drop_remainder=False,
-    )
-    .prefetch(1)
-)
+print("\nTest dataset specification:")
+print(test_ds_eval.element_spec)
 
-
-print(
-    "\nTest dataset specification:"
-)
-
-print(
-    test_ds_eval.element_spec
-)
-
-
-# ======================================================================
 # Select the model input according to the requested branch
-# ======================================================================
-
 def select_model_input(images):
-    """
-    Select the appropriate tensor from a paired dataset.
-
-    Native datasets already contain a single input tensor.
-    """
-
+    
     if EVALUATION_SCOPE == "native":
         return images
 
@@ -534,61 +267,32 @@ def select_model_input(images):
         return global_images
 
     if BRANCH == "fusion":
-        return [
-            local_images,
-            global_images,
-        ]
+        return [local_images, global_images]
 
-    raise ValueError(
-        f"Unsupported branch: {BRANCH}"
-    )
+    raise ValueError(f"Unsupported branch: {BRANCH}")
 
-
-# ======================================================================
 # Validate one batch
-# ======================================================================
-
 for images, labels in test_ds_eval.take(1):
-    model_inputs = select_model_input(
-        images
-    )
+    model_inputs = select_model_input(images)
 
     if BRANCH == "fusion":
-        print(
-            "\nLocal evaluation batch:",
-            model_inputs[0].shape,
-        )
-
-        print(
-            "Global evaluation batch:",
-            model_inputs[1].shape,
-        )
-
+        print("\nLocal evaluation batch:", model_inputs[0].shape)
+        print("Global evaluation batch:", model_inputs[1].shape)
     else:
-        print(
-            f"\n{BRANCH.capitalize()} evaluation batch:",
-            model_inputs.shape,
-        )
-
-    print(
-        "Labels:",
-        labels.shape,
-    )
+        print(f"\n{BRANCH.capitalize()} evaluation batch:", model_inputs.shape)
+    
+    print("Labels:", labels.shape)
 
 # Inference
 y_true, y_prob = collect_binary_predictions(model=model, dataset=test_ds_eval, input_selector=select_model_input)
 metrics = calculate_metrics(y_true, y_prob)
 
 print(f"\n{BRANCH.capitalize()} test results ({EVALUATION_SCOPE} evaluation):")
-print(f"Number of samples: {len(y_true)}")
 print(f"Probability range: {y_prob.min():.4f}–{y_prob.max():.4f}, mean: {y_prob.mean():.4f}")
 print(f"AUC: {metrics['auc']:.4f}, PR-AUC: {metrics['ap']:.4f}, BCE: {metrics['bce']:.4f}, Brier: {metrics['brier']:.4f}")
 
-
-for threshold in ALL_THRESHOLDS:
-    
+for threshold in ALL_THRESHOLDS:    
     metrics = calculate_metrics(y_true, y_prob, threshold)
-
     print(
         f"threshold: {threshold:.3f}, "
         f"accuracy: {metrics["accuracy"]:.4f}, "
@@ -600,75 +304,25 @@ for threshold in ALL_THRESHOLDS:
         f"TP: {metrics["tp"]}, TN: {metrics["tn"]}, FP: {metrics["fp"]}, FN: {metrics["fn"]}"
     )
 
-# ======================================================================
 # Confusion matrix at the retained threshold
-# ======================================================================
-
 y_pred_retained = (y_prob >= OPTIMAL_THRESHOLDS).astype(np.int32)
-
 cm = confusion_matrix(y_true, y_pred_retained, labels=[0, 1])
+display = ConfusionMatrixDisplay(cm, display_labels=["Benign", "Malignant"])
 
-display = ConfusionMatrixDisplay(
-    confusion_matrix=cm,
-    display_labels=[
-        "Benign",
-        "Malignant",
-    ],
-)
-
-fig, ax = plt.subplots(
-    figsize=(5, 5)
-)
-
-display.plot(
-    ax=ax,
-    values_format="d",
-    colorbar=False,
-)
-
-ax.set_title(
-    f"Confusion Matrix – Test Set\n"
-    f"Threshold = {OPTIMAL_THRESHOLDS:.3f}"
-)
-
+fig, ax = plt.subplots(figsize=(5, 5))
+display.plot(ax=ax, values_format="d", colorbar=False)
+ax.set_title(f"Confusion Matrix - Test Set Threshold = {OPTIMAL_THRESHOLDS:.3f}")
 fig.tight_layout()
 
-confusion_matrix_path = (
-    OUTPUT_PLOT
-    / (
-        f"confusion_matrix_{BRANCH}_"
-        f"{EVALUATION_SCOPE}_"
-        f"seed_{SEED}.png"
-    )
-)
-
-fig.savefig(
-    confusion_matrix_path,
-    dpi=300,
-    bbox_inches="tight",
-)
+confusion_matrix_path = (OUTPUT_PLOT / f"confusion_matrix_{BRANCH}_{EVALUATION_SCOPE}_seed_{SEED}.png")
+fig.savefig(confusion_matrix_path, dpi=300, bbox_inches="tight")
 
 plt.close(fig)
 
-print(
-    "\nConfusion matrix saved to:"
-)
-print(
-    confusion_matrix_path
-)
+print(f"Confusion matrix saved to {confusion_matrix_path}")
 
-# ======================================================================
 # Save predictions
-# ======================================================================
-
-predictions_path = (
-    OUTPUT_MODEL
-    / (
-        f"{BRANCH}_{EVALUATION_SCOPE}"
-        f"_test_predictions_seed_{SEED}.csv"
-    )
-)
-
+predictions_path = OUTPUT_MODEL / f"{BRANCH}_{EVALUATION_SCOPE}_test_predictions_seed_{SEED}.csv"
 
 predictions_df = pd.DataFrame(
     {
@@ -678,25 +332,12 @@ predictions_df = pd.DataFrame(
 )
 
 
-predictions_df.to_csv(
-    predictions_path,
-    index=False,
-)
+predictions_df.to_csv(predictions_path, index=False)
+
+print(f"Predictions saved to {predictions_path}")
 
 
-print(
-    "\nPredictions saved to:"
-)
-
-print(
-    predictions_path
-)
-
-
-# ======================================================================
 # Final cleanup
-# ======================================================================
-
 del test_ds
 del test_ds_eval
 del model

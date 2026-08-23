@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from src.functions import ensure_directory, load_data, parse_arguments
-from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, IMAGES_ROOT, MAMMOGRAM_KEY, OPTIMAL_THRESHOLDS
+from src.functions import ensure_directory, load_data, parse_arguments, load_json_data
+from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, IMAGES_ROOT, MAMMOGRAM_KEY
 from src.preprocessing.dicom_handling import read_dicom_as_array
 from src.preprocessing.dataset_preprocessing import orient_by_breast_mass
 from src.data.pairing import pair_local_global, validate_columns
@@ -66,6 +66,7 @@ GRADCAM_OUTPUT_DIR = OUTPUT_PLOT / "residual_fusion_gradcam"
 SAMPLE_INDEX = args.idx
 TARGET_CLASS = args.target_class
 HEATMAP_ALPHA = 0.35
+OPTIMAL_THRESHOLDS = load_json_data(f"residual_thresholds_seed_{SEED}.json", "selected_threshold")
 
 tf.keras.backend.clear_session()
 gc.collect()

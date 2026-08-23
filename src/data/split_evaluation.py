@@ -9,10 +9,6 @@ from src.functions import ensure_directory
 
 ensure_directory(OUTPUT_PLOT)
 
-# ------------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------------
-
 SPLIT_FILES = {
     "Train": SPLITS_DIR / "train_split.csv",
     "Validation": SPLITS_DIR / "val_split.csv",
@@ -32,10 +28,6 @@ DENSITY_LABELS = {
     4: "4 - Extremely dense",
 }
 
-
-# ------------------------------------------------------------------
-# Utility functions
-# ------------------------------------------------------------------
 
 def standardize_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -159,10 +151,6 @@ def annotate_stacked_bars(
         cumulative_values += values
 
 
-# ------------------------------------------------------------------
-# Load splits
-# ------------------------------------------------------------------
-
 split_dataframes = []
 
 for split_name, file_path in SPLIT_FILES.items():
@@ -232,10 +220,6 @@ distribution_df["split"] = pd.Categorical(
 )
 
 
-# ------------------------------------------------------------------
-# Validation
-# ------------------------------------------------------------------
-
 missing_labels = distribution_df["class"].eq("Missing").sum()
 missing_densities = distribution_df["breast_density"].eq("Missing").sum()
 
@@ -248,10 +232,6 @@ if missing_labels > 0:
         "Some observations have no valid class label."
     )
 
-
-# ------------------------------------------------------------------
-# 1. Overall benign/malignant distribution by split
-# ------------------------------------------------------------------
 
 overall_counts = pd.crosstab(
     distribution_df["split"],
@@ -275,10 +255,6 @@ print(overall_counts)
 print("\nOverall percentages by split")
 print(overall_percentages.round(2))
 
-
-# ------------------------------------------------------------------
-# 2. Distribution by split and breast density
-# ------------------------------------------------------------------
 
 density_counts = (
     distribution_df
@@ -310,10 +286,6 @@ print("\nPercentages by split and breast density")
 print(density_percentages.round(2))
 
 
-# ------------------------------------------------------------------
-# 3. Long-format summary table
-# ------------------------------------------------------------------
-
 summary_table = (
     density_counts
     .reset_index()
@@ -337,10 +309,7 @@ print("\nDetailed summary")
 print(summary_table.to_string(index=False))
 
 
-# ------------------------------------------------------------------
 # Save summary tables
-# ------------------------------------------------------------------
-
 overall_counts.to_csv(
     OUTPUT_DIR / "overall_class_counts_local.csv"
 )
@@ -354,11 +323,6 @@ summary_table.to_csv(
     index=False,
 )
 
-
-# ------------------------------------------------------------------
-# Graph 1:
-# Overall benign/malignant proportions by split
-# ------------------------------------------------------------------
 
 fig, ax = plt.subplots(figsize=(8, 6))
 
@@ -401,10 +365,6 @@ fig.savefig(
 plt.show()
 
 
-# ------------------------------------------------------------------
-# Prepare ordered density table for graphs
-# ------------------------------------------------------------------
-
 available_densities = [
     density
     for density in DENSITY_LABELS.values()
@@ -441,11 +401,6 @@ density_percentages_for_plot = (
     .fillna(0)
 )
 
-
-# ------------------------------------------------------------------
-# Graph 2:
-# Benign/malignant proportions by split and density
-# ------------------------------------------------------------------
 
 plot_labels = [
     f"{split_name}\n{density_name.split(' - ')[0]}"
@@ -522,12 +477,6 @@ fig.savefig(
 
 plt.show()
 
-
-# ------------------------------------------------------------------
-# Graph 3:
-# Number of observations per density and split
-# ------------------------------------------------------------------
-
 density_totals = (
     distribution_df
     .groupby(
@@ -599,11 +548,6 @@ fig.savefig(
     bbox_inches="tight",
 )
 
-
-# ------------------------------------------------------------------
-# Graph 4:
-# Overall benign/malignant proportions by split
-# ------------------------------------------------------------------
 
 fig, ax = plt.subplots(figsize=(8, 6))
 

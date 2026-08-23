@@ -1,4 +1,5 @@
 import tensorflow as tf
+from src.evaluation.evaluation_utils import build_binary_metrics
 
 def callbacks_for(checkpoint_path, log_path):
     return [
@@ -32,3 +33,13 @@ def callbacks_for(checkpoint_path, log_path):
             ),
         ),
     ]
+
+
+def compile_binary_model(model, learning_rate=1e-4):
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+        loss=tf.keras.losses.BinaryCrossentropy(),
+        metrics=build_binary_metrics()
+    )
+
+    return model
