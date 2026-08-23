@@ -34,6 +34,30 @@ def callbacks_for(checkpoint_path, log_path):
         ),
     ]
 
+def build_binary_metrics(thresholds=THRESHOLDS):
+    
+    metrics = [
+        tf.keras.metrics.BinaryAccuracy(name="accuracy"),
+        tf.keras.metrics.AUC(name="auc", curve="ROC"),
+        tf.keras.metrics.AUC(name="pr_auc", curve="PR"),
+    ]
+
+    for threshold in thresholds:
+        suffix = round(threshold * 100)
+
+        metrics.extend([
+            tf.keras.metrics.Recall(
+                name=f"recall_{suffix}",
+                thresholds=threshold,
+            ),
+            tf.keras.metrics.Precision(
+                name=f"precision_{suffix}",
+                thresholds=threshold,
+            ),
+        ])
+
+    return metrics
+
 
 def compile_binary_model(model, learning_rate=1e-4):
     model.compile(

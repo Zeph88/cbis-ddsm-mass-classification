@@ -89,30 +89,6 @@ def collect_binary_predictions(model: tf.keras.Model, dataset: tf.data.Dataset, 
 
     return y_true, y_probability
 
-def build_binary_metrics(thresholds=THRESHOLDS):
-    
-    metrics = [
-        tf.keras.metrics.BinaryAccuracy(name="accuracy"),
-        tf.keras.metrics.AUC(name="auc", curve="ROC"),
-        tf.keras.metrics.AUC(name="pr_auc", curve="PR"),
-    ]
-
-    for threshold in thresholds:
-        suffix = int(threshold * 100)
-
-        metrics.extend([
-            tf.keras.metrics.Recall(
-                name=f"recall_{suffix}",
-                thresholds=threshold,
-            ),
-            tf.keras.metrics.Precision(
-                name=f"precision_{suffix}",
-                thresholds=threshold,
-            ),
-        ])
-
-    return metrics
-
 def plot_training_metric(history, metric_name, ylabel, title, output_path):
 
     train_key = metric_name
