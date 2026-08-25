@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from src.functions import ensure_directory, parse_arguments
-from src.config import OUTPUT_NPY, OUTPUT_PLOT, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH, PROJECT_ROOT
+from src.config import OUTPUT_NPY, OUTPUT_PLOT, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH, PROJECT_ROOT, OUTPUT_MODEL
 from src.xAI_gradcam.gradcam_utils import build_resnet_feature_model, make_branch_gradcam_heatmap, get_layers_between, save_gradcam_figures
 
 ensure_directory(OUTPUT_PLOT)

@@ -151,7 +151,7 @@ if args.model == "residual":
         global_model=global_model,
         correction_units=RESIDUAL_UNITS,
         correction_dropout=RESIDUAL_DROPOUT,
-        correction_l2=RESIDUAL_L2,
+        correction_l2=RESIDUAL_L2
     )
 
 elif args.model == "symmetric":
@@ -190,10 +190,7 @@ if args.model == "residual":
         print("Maximum initial local/residual probability difference:", maximum_difference)
 
         if maximum_difference > 1e-5:
-            raise ValueError(
-                "The residual model does not initially reproduce "
-                "the local model."
-            )
+            raise ValueError("The residual model does not initially reproduce the local model.")
 
     del verification_ds
     gc.collect()

@@ -2,24 +2,39 @@
 
 Deep-learning project for **benign vs malignant classification of known mammographic masses** using the CBIS-DDSM dataset.
 
-The project investigates whether a lesion-centred representation can benefit from complementary information extracted from the full mammogram. The final implementation compares:
+The project investigates whether a lesion-centred representation benefits from complementary information extracted from the full mammogram. Four architectures are evaluated:
 
 - a **local ResNet50 branch** trained on ROI-centred lesion crops;
 - a **global ResNet50 branch** trained on full mammograms;
-- a **residual local-global fusion model**, where the local prediction acts as the baseline and the global representation learns a contextual correction;
-- **Grad-CAM** visualisations for qualitative interpretation.
+- a **symmetric local-global fusion model** that concatenates local and global embeddings;
+- a **residual local-global fusion model** that preserves the local decision as a baseline and learns a contextual correction from local and global features.
 
-## Scope
+Grad-CAM is used for qualitative interpretation of the local, global and residual-fusion models.
 
-This project addresses **computer-aided diagnosis (CADx)** rather than lesion detection or screening.
+> **Academic project only.** This repository is intended for research and coursework. It is not a validated medical device and must not be used for clinical decision-making.
 
-The abnormality location is assumed to be known from the expert-provided CBIS-DDSM ROI mask. The task is therefore to classify a known mammographic mass as **benign** or **malignant**.
+---
 
-## Dataset
+## Research question
 
-The project uses the **CBIS-DDSM mass subset**.
+The main question is:
 
-Raw DICOM files are **not distributed in this repository**. They must be obtained separately from the CBIS-DDSM collection before running the preprocessing pipeline.
+> **Does combining local lesion information with global mammographic context improve benign–malignant mass classification compared with either representation alone?**
+
+A secondary question examines **how** the two representations should be combined: symmetrically, or through a residual formulation in which the local lesion prediction remains the primary decision and global context learns only a correction.
+
+---
+
+## Dataset and task
+
+The project uses the **mass subset of CBIS-DDSM**.
+
+The task is **computer-aided diagnosis (CADx)** rather than lesion detection. The abnormality is assumed to be known from the expert-provided ROI mask, and the target is binary:
+
+- `0`: benign / benign without callback;
+- `1`: malignant.
+
+Raw DICOM files are **not included in the repository** and must be obtained separately.
 
 The original metadata used by the project are version-controlled under:
 
@@ -29,49 +44,257 @@ data/metadata/
 └── mass_case_description_test_set.csv
 ```
 
-The repository also contains the resolved dataset index:
+The resolved lesion-level dataset index is stored under:
 
 ```text
 data/processed/mass_dataset_index.csv
 ```
 
-The dataset-building code resolves the DICOM files using their metadata, including the DICOM `SeriesDescription` field.
+---
 
-### Raw data location
+## Experimental design
 
-By default, the code expects the CBIS-DDSM DICOM hierarchy under:
+Patient identity is treated as the grouping variable throughout the evaluation pipeline to reduce the risk of patient leakage.
+
+The project contains two complementary evaluation settings:
+
+1. **Fixed train / validation / test partitions** for model development, saved-model evaluation and operating-threshold selection.
+2. **Five-fold patient-grouped cross-validation** for the final comparison of local, global, symmetric-fusion and residual-fusion architectures.
+
+The same outer patient partitions are used for all architectures in the cross-validation analysis, allowing paired comparison on matched out-of-fold observations.
+
+For uncertainty estimation, paired model differences are evaluated using a **patient-cluster bootstrap with 10,000 replicates** and percentile-based 95% confidence intervals.
+
+---
+
+## Reported results
+
+The values below reproduce the results reported in the accompanying `draft_report.pdf`. Small numerical differences may occur when neural-network training is repeated, even with fixed random seeds.
+
+### Five-fold patient-grouped cross-validation
+
+Mean ± standard deviation across five outer folds:
+
+| Architecture | ROC-AUC | BCE | AP | Brier |
+|---|---:|---:|---:|---:|
+| Global | 0.651 ± 0.073 | 0.679 ± 0.043 | 0.643 ± 0.084 | 0.240 ± 0.019 |
+| Local | 0.692 ± 0.106 | 0.632 ± 0.049 | 0.694 ± 0.121 | 0.222 ± 0.023 |
+| Symmetric fusion | 0.723 ± 0.092 | 0.623 ± 0.080 | 0.728 ± 0.100 | 0.216 ± 0.034 |
+| **Residual fusion** | **0.734 ± 0.076** | **0.602 ± 0.056** | **0.742 ± 0.093** | **0.208 ± 0.025** |
+
+Residual fusion achieved the strongest mean performance across the four reported metrics, although performance varied substantially between patient partitions.
+
+### Pooled out-of-fold results
+
+The pooled OOF ROC-AUC values were:
+
+| Architecture | Pooled ROC-AUC |
+|---|---:|
+| Global | 0.646 |
+| Local | 0.697 |
+| Symmetric fusion | 0.724 |
+| **Residual fusion** | **0.733** |
+
+For residual fusion, the pooled OOF metrics were:
 
 ```text
-data/raw/cbis_ddsm/
+ROC-AUC: 0.733
+AP:      0.745
+BCE:     0.602
+Brier:   0.208
 ```
 
-A different location can be configured with the environment variable:
+### Paired patient-level bootstrap
+
+Residual fusion compared with the local branch:
+
+| Metric | Residual − Local | 95% bootstrap CI |
+|---|---:|---:|
+| ROC-AUC | +0.036 | [+0.012, +0.060] |
+| BCE | -0.030 | [-0.048, -0.011] |
+| AP | +0.038 | [+0.016, +0.059] |
+| Brier | -0.013 | [-0.022, -0.005] |
+
+All four intervals excluded zero in the favourable direction.
+
+The residual-vs-symmetric comparison was more nuanced. The ROC-AUC difference was small and its confidence interval included zero:
+
+```text
+Residual − Symmetric ROC-AUC:
++0.009  [95% CI: -0.008, +0.026]
+```
+
+However, residual fusion showed clearer improvements in BCE and average precision:
+
+```text
+BCE:   -0.021  [95% CI: -0.039, -0.003]
+AP:    +0.032  [95% CI: +0.005, +0.059]
+Brier: -0.007  [95% CI: -0.014, +0.0001]
+```
+
+### Calibration
+
+Expected calibration error (ECE) calculated from pooled OOF predictions:
+
+| Architecture | ECE |
+|---|---:|
+| Global | 0.0797 |
+| Local | 0.0589 |
+| Symmetric fusion | 0.0540 |
+| **Residual fusion** | **0.0240** |
+
+ECE is interpreted descriptively because it depends on the calibration-bin definition.
+
+### Operating threshold reported in the draft
+
+The retained residual-fusion operating threshold was selected from **validation predictions only**, with a predefined target of at least **85% sensitivity**.
+
+The threshold reported in the draft was:
+
+```text
+Selected threshold: 0.265
+```
+
+Applied unchanged to the paired test set, it produced:
+
+| Metric | Test result |
+|---|---:|
+| Sensitivity / recall | 0.884 |
+| Specificity | 0.537 |
+| Precision | 0.563 |
+| F1-score | 0.688 |
+| Balanced accuracy | 0.711 |
+| Accuracy | 0.677 |
+| True positives | 130 |
+| True negatives | 117 |
+| False positives | 101 |
+| False negatives | 17 |
+
+The threshold is an **operating point**, not an intrinsic model parameter. Re-training the model may shift the probability distribution and therefore the validation-selected threshold.
+
+---
+
+## Model architecture
+
+### Local branch
+
+The local branch receives a lesion-centred mammographic crop:
+
+```text
+Input: 384 × 384 × 1
+```
+
+The expert ROI mask is used to identify the lesion and centre the crop. The final model uses an ImageNet-pretrained ResNet50 backbone with frozen convolutional weights and a lightweight task-specific classification head.
+
+The local branch is the strongest individual branch in the final comparison.
+
+### Global branch
+
+The global branch receives the full preprocessed mammogram:
+
+```text
+Input: 768 × 512 × 1
+```
+
+The preprocessing normalises breast orientation, removes isolated annotations and background artefacts, and retains the main breast region.
+
+The global branch is weaker as a standalone classifier than the local branch but provides complementary contextual information to the fusion models.
+
+### Symmetric fusion
+
+The symmetric architecture retrieves learned embeddings from the frozen local and global branches, normalises them independently, concatenates them, and trains a lightweight fusion head.
+
+Conceptually:
+
+```text
+local embedding ─┐
+                 ├─ concatenate → fusion head → probability
+global embedding ┘
+```
+
+### Residual fusion
+
+The residual architecture treats the local prediction as the baseline and learns a contextual logit correction:
+
+```text
+final logit = frozen local logit + contextual correction
+```
+
+The correction is learned from the combined local and global embeddings.
+
+The final correction layer is zero-initialised so that, before fusion training:
+
+```text
+residual prediction = local prediction
+```
+
+This makes the global representation complementary rather than forcing it to contribute symmetrically to the final decision.
+
+---
+
+## Preprocessing
+
+Preprocessing is performed once and saved as NumPy arrays to avoid repeated DICOM decoding during training.
+
+### Local preprocessing
 
 ```bash
-CBIS_DDSM_ROOT=/path/to/cbis_ddsm
+python -m src.preprocessing.dataset_preprocessing --mode local
 ```
 
-Raw DICOM files and generated NumPy arrays are intentionally excluded from Git.
+This generates:
 
-## Exact experimental splits
+- lesion-centred `384 × 384` local images;
+- lesion-specific ROI masks transformed into the same `768 × 512` spatial space as the global mammograms.
 
-The exact train, validation and test partitions used for the reported experiments are version-controlled under:
+Typical outputs:
 
 ```text
-data/train_val_test_splits/
-├── train_split.csv
-├── val_split.csv
-├── test_split.csv
-├── train_split_global.csv
-├── val_split_global.csv
-└── test_split_global.csv
+data/preprocessed/
+├── zoom_384x384/
+├── roi_global_768x512/
+└── dataset_index_zoom_384x384.csv
 ```
 
-Splits are created at **patient level** to prevent patient leakage between train, validation and test sets.
+The local index stores the path to the corresponding global-space ROI mask. This mask is later used for Grad-CAM/ROI comparison without reopening the original DICOM files.
 
-The official CBIS-DDSM test partition is retained as the test set. A validation subset is derived from the official training data using grouped stratification.
+### Global preprocessing
 
-For the global branch, multiple lesion rows belonging to the same mammogram are consolidated into one mammogram-level sample. If a mammogram contains both benign and malignant lesions, the malignant label is retained.
+```bash
+python -m src.preprocessing.dataset_preprocessing --mode global
+```
+
+Typical outputs:
+
+```text
+data/preprocessed/
+├── full_768x512/
+└── dataset_index_full_768x512.csv
+```
+
+---
+
+## Pairing local lesions with full mammograms
+
+Fusion is performed at lesion level.
+
+A local lesion is linked to its global mammogram using:
+
+```text
+patient_id
+left or right breast
+image view
+```
+
+The pairing implementation is located in:
+
+```text
+src/data/pairing.py
+```
+
+The global lookup is constrained so that a mammogram key maps to a single full-mammogram path, and the final merge is validated as `many_to_one`.
+
+---
 
 ## Repository structure
 
@@ -84,56 +307,112 @@ For the global branch, multiple lesion rows belonging to the same mammogram are 
 ├── src/
 │   ├── data/
 │   │   ├── build_dataset.py
+│   │   ├── pairing.py
+│   │   ├── split_evaluation.py
 │   │   ├── train_val_test_split.py
-│   │   ├── unique_patient_global.py
-│   │   └── split_evaluation.py
+│   │   └── unique_patient_global.py
 │   ├── preprocessing/
 │   │   ├── dataset_preprocessing.py
 │   │   └── dicom_handling.py
+│   ├── modeling/
+│   │   ├── fusion.py
+│   │   ├── global_resnet50.py
+│   │   └── local_resnet50.py
 │   ├── training/
 │   │   ├── dataset_preparation.py
-│   │   ├── resnet50_local_branch.py
-│   │   ├── resnet50_global_branch.py
 │   │   ├── fusion_global_local_resnet50.py
+│   │   ├── resnet50_global_branch.py
+│   │   ├── resnet50_local_branch.py
 │   │   ├── threshold_selection.py
-│   │   └── cnn_evaluation.py
+│   │   └── training_utils.py
+│   ├── evaluation/
+│   │   ├── analyse_oof.py
+│   │   ├── evaluation_utils.py
+│   │   ├── generate_branch_oof.py
+│   │   └── run_fusion_cv.py
 │   ├── predict/
-│   │   ├── evaluate_saved_model.py
 │   │   ├── evaluate_residual_threshold.py
-│   │   ├── resnet50_fusion.py
-│   │   └── best_alpha.py
+│   │   └── evaluate_saved_model.py
 │   ├── xAI_gradcam/
+│   │   ├── grad_cam_residual_resnet.py
 │   │   ├── grad_cam_resnet.py
-│   │   └── grad_cam_residual_resnet.py
-│   ├── experiments/
-│   │   └── ...
+│   │   └── gradcam_utils.py
 │   ├── config.py
 │   └── functions.py
+├── draft_report.pdf
+├── residual_threshold_seed_42.json
 ├── requirements.txt
 └── README.md
 ```
 
-`src/experiments/` contains intermediate experiments retained to document the development process. The final reported pipeline is implemented primarily under `src/preprocessing/`, `src/training/`, `src/predict/` and `src/xAI_gradcam/`.
+Generated NumPy arrays, model checkpoints and plots are not intended to be version-controlled.
 
-## Pipeline
+---
 
-### 1. Build the dataset index
+## Installation
 
-After downloading CBIS-DDSM and configuring `CBIS_DDSM_ROOT` if required:
+Create and activate a virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Core dependencies include TensorFlow/Keras, NumPy, pandas, SciPy, scikit-learn, matplotlib, OpenCV, pydicom and pylibjpeg.
+
+---
+
+## Raw CBIS-DDSM location
+
+By default, the project expects the raw DICOM hierarchy at:
+
+```text
+data/raw/cbis_ddsm/
+```
+
+To use another location:
+
+```bash
+export CBIS_DDSM_ROOT="/path/to/cbis_ddsm"
+```
+
+For example:
+
+```bash
+export CBIS_DDSM_ROOT="/home/user/datasets/cbis-ddsm/cbis_ddsm"
+```
+
+The path must point to the directory that directly contains folders such as:
+
+```text
+Mass-Training_P_00001_LEFT_CC/
+Mass-Test_P_XXXXX_RIGHT_MLO/
+...
+```
+
+---
+
+## End-to-end workflow
+
+### 1. Build the resolved dataset index
 
 ```bash
 python -m src.data.build_dataset
 ```
 
-This resolves the relevant DICOM files and creates:
+### 2. Create or inspect patient-grouped splits
+
+The exact splits used for the reported experiments are already stored under:
 
 ```text
-data/processed/mass_dataset_index.csv
+data/train_val_test_splits/
 ```
-
-### 2. Build or inspect the data splits
-
-The exact splits used in the reported experiments are already included in the repository.
 
 They can be regenerated with:
 
@@ -142,188 +421,241 @@ python -m src.data.train_val_test_split
 python -m src.data.unique_patient_global
 ```
 
-Dataset distributions can be inspected with:
+Inspect the split distributions with:
 
 ```bash
 python -m src.data.split_evaluation
 ```
 
-### 3. Preprocess the DICOM data
-
-Preprocessing converts the CBIS-DDSM DICOM files into reusable `.npy` arrays. This step is performed separately from model training so that DICOM decoding and image preprocessing do not need to be repeated for every experiment.
-
-By default, the pipeline expects the raw CBIS-DDSM dataset under:
-
-```text
-data/raw/cbis_ddsm/
-```
-
-If the dataset is stored elsewhere, define the CBIS_DDSM_ROOT environment variable before running the preprocessing step:
-
-```bash
-export CBIS_DDSM_ROOT="/path/to/cbis_ddsm"
-```
-
-Run the preprocessing separately for the local and global branches:
+### 3. Preprocess local and global inputs
 
 ```bash
 python -m src.preprocessing.dataset_preprocessing --mode local
 python -m src.preprocessing.dataset_preprocessing --mode global
 ```
 
-The local mode generates ROI-centred lesion crops at 384 × 384, while the global mode preprocesses full mammograms at 768 × 512.
-
-Generated arrays are stored under:
-
-```text
-data/preprocessed/
-```
-
-These generated files are not version-controlled.
-
-### Local representation
-
-The final local representation:
-
-- uses the expert ROI mask to locate the lesion;
-- calculates the lesion centroid from the mask;
-- extracts a fixed-size lesion-centred crop;
-- uses a final resolution of **384 × 384**.
-
-### Global representation
-
-The final global representation:
-
-- uses the full mammogram;
-- normalises breast orientation;
-- removes isolated annotations and background artefacts using OpenCV thresholding, morphology and connected-component analysis;
-- retains the main breast region;
-- uses a final resolution of **768 × 512**.
-
-## Final models
-
-### Local ResNet50
-
-The retained local model uses an ImageNet-pretrained ResNet50 backbone with frozen convolutional weights and a task-specific classification head.
+### 4. Train the individual branches
 
 ```bash
 python -m src.training.resnet50_local_branch
-```
-
-### Global ResNet50
-
-The global model applies the same transfer-learning principle to the full mammogram representation.
-
-```bash
 python -m src.training.resnet50_global_branch
 ```
 
-### Residual local-global fusion
+### 5. Train fixed-split fusion models
 
-The final fusion model treats the local branch as the primary classifier and learns a contextual correction from the combined local and global embeddings:
+Symmetric fusion:
+
+```bash
+python -m src.training.fusion_global_local_resnet50 --model symmetric
+```
+
+Residual fusion:
+
+```bash
+python -m src.training.fusion_global_local_resnet50 --model residual
+```
+
+### 6. Run five-fold fusion cross-validation
+
+All outer folds:
+
+```bash
+python -m src.evaluation.run_fusion_cv --all
+```
+
+A single fold:
+
+```bash
+python -m src.evaluation.run_fusion_cv --fold 0
+```
+
+Use `--force` to retrain checkpoints that already exist.
+
+### 7. Generate local/global OOF predictions
+
+```bash
+python -m src.evaluation.generate_branch_oof --all
+```
+
+Use `--overwrite` to overwrite existing branch OOF prediction files.
+
+### 8. Analyse OOF predictions
+
+```bash
+python -m src.evaluation.analyse_oof
+```
+
+The analysis produces:
+
+- fold-level metrics;
+- pooled OOF metrics;
+- paired fold differences;
+- patient-cluster bootstrap distributions;
+- 95% bootstrap confidence intervals;
+- calibration tables;
+- an OOF reliability diagram.
+
+Cross-validation results are written under:
 
 ```text
-final logit = local logit + contextual correction
+src/models/fusion_cv_5fold_seed_42/
 ```
 
-The local and global branches are frozen during fusion training. The correction output is zero-initialised so that the fusion model initially reproduces the local prediction.
+### 9. Select the residual operating threshold
 
 ```bash
-python -m src.training.fusion_global_local_resnet50
+python -m src.predict.evaluate_residual_threshold
 ```
 
-Generated model files are written to `src/models/`. This directory is created automatically when required and is excluded from Git.
-
-## Threshold selection and evaluation
-
-ROC-AUC and binary cross-entropy are used for model comparison, together with threshold-dependent metrics such as:
-
-- accuracy;
-- precision;
-- sensitivity / recall;
-- specificity;
-- F1-score.
-
-The final operating threshold is selected from **validation predictions only**, with sensitivity prioritised in the medical decision-support setting.
-
-The retained rule selects a validation threshold providing at least **85% recall**.
-
-Relevant evaluation scripts are located under:
+This performs a validation threshold grid search and stores the selected operating point in:
 
 ```text
-src/predict/
+residual_threshold_seed_42.json
 ```
 
-Plots are written to `src/plots/`. This directory is created automatically when required and is excluded from Git.
+### 10. Evaluate saved models
 
-## Interpretability
-
-Grad-CAM is used to inspect the spatial regions contributing to model predictions.
-
-For the individual local and global branches, Grad-CAM can be generated for a selected mammogram using:
+Examples:
 
 ```bash
-python -m src.xAI_gradcam.grad_cam_resnet --mode local --idx <index>
-python -m src.xAI_gradcam.grad_cam_resnet --mode global --idx <index>
+python -m src.predict.evaluate_saved_model --model local --scope native
+python -m src.predict.evaluate_saved_model --model local --scope paired
+python -m src.predict.evaluate_saved_model --model global --scope native
+python -m src.predict.evaluate_saved_model --model symmetric --scope paired
+python -m src.predict.evaluate_saved_model --model residual --scope paired
 ```
 
-For the final residual local-global fusion model, Grad-CAM can be generated with:
+`paired` evaluation is useful when comparing a branch directly with the fusion models because it restricts evaluation to matched lesion/mammogram observations.
+
+---
+
+## Grad-CAM interpretability
+
+The project adapts the Grad-CAM approach from the Keras computer-vision example.
+
+### Individual branch Grad-CAM
+
+Local:
 
 ```bash
-python -m src.xAI_gradcam.grad_cam_residual_resnet --idx <index> --target_class <0_or_1>
+python -m src.xAI_gradcam.grad_cam_resnet \
+    --mode local \
+    --idx 0 \
+    --target_class predicted
 ```
 
-The --idx argument selects the sample to analyse. For the single-branch Grad-CAM script, --mode determines whether the ROI-centred local representation or the full-mammogram global representation is analysed.
-
-For the residual-fusion model, --target_class specifies the class for which the Grad-CAM activation maps are generated.
-
-Grad-CAM outputs are treated as qualitative interpretability evidence. They indicate spatial regions associated with the model prediction but do not demonstrate that the model relies on clinically meaningful or causal features.
-
-## Installation
-
-Create a virtual environment and install the project dependencies:
+Global:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+python -m src.xAI_gradcam.grad_cam_resnet \
+    --mode global \
+    --idx 0 \
+    --target_class predicted
 ```
 
-On Windows:
+`--target_class` accepts:
 
-```powershell
-.venv\Scripts\activate
-pip install -r requirements.txt
+```text
+predicted
+0
+1
 ```
 
-Core dependencies include:
+### Residual-fusion Grad-CAM
 
-- TensorFlow / Keras
-- NumPy
-- pandas
-- SciPy
-- scikit-learn
-- matplotlib
-- OpenCV
-- pydicom
-- pylibjpeg
+```bash
+python -m src.xAI_gradcam.grad_cam_residual_resnet \
+    --idx 0 \
+    --target_class predicted
+```
+
+The residual Grad-CAM pipeline can compare the global activation map with the lesion ROI in the same preprocessed global spatial space.
+
+Reported ROI-related Grad-CAM measures include:
+
+- fraction of Grad-CAM energy inside the ROI;
+- whether the activation peak lies inside the ROI;
+- Dice and IoU for the top 20% of activated pixels;
+- ROI area fraction;
+- activation enrichment relative to ROI area.
+
+These measures are exploratory. Grad-CAM is treated as qualitative/diagnostic interpretability evidence and does not establish that the model learned clinically causal features.
+
+---
 
 ## Reproducibility
 
-The project uses fixed dataset partitions and fixed random seeds where applicable.
-
-The principal experimental seeds are:
+The final configuration is centralised in:
 
 ```text
-42
-123
-999
+src/config.py
 ```
 
-Full reproduction requires obtaining the CBIS-DDSM DICOM dataset separately. The raw DICOM files are not included because they are external source data and are substantially larger than the source-code repository.
+Main settings include:
 
-Generated `.npy` arrays, trained model checkpoints and plots are also excluded because they can be recreated from the raw data and the provided pipeline.
+```text
+SEED = 42
+BATCH_SIZE = 16
+EPOCHS = 100
 
-## Notes
+LOCAL_HEIGHT = 384
+LOCAL_WIDTH = 384
 
-This repository was developed as part of an academic machine-learning project. Intermediate experimental scripts are retained under `src/experiments/`, while the final pipeline is separated into dedicated data, preprocessing, training, evaluation and interpretability modules.
+GLOBAL_HEIGHT = 768
+GLOBAL_WIDTH = 512
+
+N_OUTER_FOLDS = 5
+N_BOOTSTRAP = 10000
+```
+
+The repository version-controls:
+
+- the original metadata;
+- the resolved dataset index;
+- the fixed patient-grouped train/validation/test splits;
+- the source code;
+- the reported residual operating-threshold JSON.
+
+The following are intentionally external or generated:
+
+- raw CBIS-DDSM DICOM files;
+- preprocessed `.npy` arrays;
+- trained model checkpoints;
+- generated plots.
+
+Deep-learning training can exhibit small run-to-run numerical variation depending on the TensorFlow execution environment. For this reason, the final architectural conclusions rely primarily on patient-grouped cross-validation, matched OOF predictions and paired patient-cluster bootstrap analysis rather than on a single training run.
+
+---
+
+## Main interpretation
+
+The final experiments support three main observations:
+
+1. **Lesion-centred information is more predictive than the full mammogram alone** for this CBIS-DDSM mass-classification task.
+2. **Global context can add useful complementary information**, since both fusion strategies improve aggregate performance over the individual branches.
+3. **Residual fusion is the strongest overall formulation in this study**, especially for BCE, average precision and calibration. Its ROC-AUC advantage over symmetric fusion is small and uncertain, so the results do not support claiming a clear ROC-ranking superiority between the two fusion designs.
+
+The study therefore supports global-local modelling while suggesting that **how context is incorporated may matter as much as whether it is incorporated**.
+
+---
+
+## Limitations
+
+Important limitations include:
+
+- CBIS-DDSM is relatively small compared with modern screening datasets;
+- only mass lesions are considered;
+- performance varies substantially between patient partitions;
+- the models operate on known abnormalities and therefore do not solve lesion detection;
+- Grad-CAM localisation is not a direct measure of clinical validity;
+- results should not be interpreted as evidence of real-world clinical performance.
+
+See `draft_report.pdf` for the full methodology, literature review, development experiments, statistical analysis and discussion.
+
+---
+
+## License / academic use
+
+This repository was developed as part of an academic machine-learning project.
+
+CBIS-DDSM remains subject to the terms of its original data provider. No raw medical images are redistributed in this repository.
