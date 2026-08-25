@@ -172,7 +172,7 @@ fusion_model.summary()
 
 if args.model == "residual":
     
-    verification_ds = (val_ds.unbatch().take(16).batch(16))
+    verification_ds = (val_ds.unbatch().take(1).batch(1))
 
     for images, labels in verification_ds:
 

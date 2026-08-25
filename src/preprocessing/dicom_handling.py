@@ -6,10 +6,7 @@ import cv2
 from src.config import PIXELS_H, PIXELS_W
 
 def tensor_to_2d_np(x) -> np.ndarray:
-    """
-    Converts a TensorFlow tensor or NumPy array to a 2D NumPy array.
-    Expected input is usually H x W x 1.
-    """
+
     if isinstance(x, tf.Tensor):
         x = x.numpy()
 
@@ -30,14 +27,8 @@ def crop_breast_to_target_ratio(
     target_size=(PIXELS_H, PIXELS_W),
     threshold_ratio=0.01,
     margin_ratio=0.02,
+    mask=None
 ):
-    """
-    Crops tightly around the breast, then adjusts the crop by removing
-    excess width or height to match the target aspect ratio.
-
-    No padding and no expansion into background are performed.
-    """
-
     image_np = (
         image.numpy()
         if isinstance(image, tf.Tensor)
@@ -49,12 +40,23 @@ def crop_breast_to_target_ratio(
     elif image_np.ndim == 2:
         image_2d = image_np
     else:
-        raise ValueError(
-            f"Expected (H, W) or (H, W, 1), got {image_np.shape}"
-        )
+        raise ValueError(f"Expected (H, W) or (H, W, 1), got {image_np.shape}")
 
     if not np.isfinite(image_2d).all():
         raise ValueError("Image contains NaN or infinite values.")
+
+    mask_2d = None
+
+    if mask is not None:
+        mask_np = (mask.numpy() if isinstance(mask, tf.Tensor) else np.asarray(mask))
+
+        if mask_np.ndim == 3 and mask_np.shape[-1] == 1:
+            mask_2d = mask_np[:, :, 0]
+        elif mask_np.ndim == 2:
+            mask_2d = mask_np
+        
+        if mask_2d.shape != image_2d.shape:
+            raise ValueError(f"Image and mask shapes differ: image={image_2d.shape}, mask={mask_2d.shape}")
 
     height, width = image_2d.shape
 
@@ -144,6 +146,10 @@ def crop_breast_to_target_ratio(
         x_min:x_max,
     ]
 
+    mask_crop = None
+    if mask_2d is not None:
+        mask_crop = mask_2d[y_min:y_max, x_min:x_max]
+
     crop_height, crop_width = crop.shape
 
     target_height, target_width = target_size
@@ -177,6 +183,9 @@ def crop_breast_to_target_ratio(
             :
         ]
 
+        if mask_crop is not None:
+            mask_crop = mask_crop[crop_top:crop_height - crop_bottom, :]
+
     elif current_ratio > target_ratio:
         # Crop too wide:
         # reduce width while preserving the right side.
@@ -195,6 +204,9 @@ def crop_breast_to_target_ratio(
             :,
             crop_width - desired_width:,
         ]
+
+        if mask_crop is not None:
+            mask_crop = mask_crop[:, crop_width - desired_width:]
 
     crop = crop[..., np.newaxis]
 
@@ -219,7 +231,16 @@ def crop_breast_to_target_ratio(
         )
     )
 
-    return resized
+    if mask_crop is None:
+        return resized
+
+    mask_crop = mask_crop[..., np.newaxis]
+
+    resized_mask = tf.image.resize(mask_crop, size=target_size, method="nearest")
+    resized_mask = tf.cast(resized_mask > 0.5, tf.uint8)
+    resized_mask.set_shape((target_height, target_width, 1))
+
+    return resized, resized_mask
 
 def apply_roi_soft_mask(image, mask, factor=0.3):
     mask = tf.cast(mask > 0, tf.float32)
@@ -297,12 +318,6 @@ def resize_with_padding(
     image,
     target_size=(512, 512),
 ):
-    """
-    Resize while preserving aspect ratio, then pad to target_size.
-    The resized mammogram is aligned to the RIGHT side of the canvas.
-    This is useful if all breasts have already been oriented to the right.
-    """
-
     image = tf.convert_to_tensor(image, dtype=tf.float32)
 
     if image.shape.rank == 2:

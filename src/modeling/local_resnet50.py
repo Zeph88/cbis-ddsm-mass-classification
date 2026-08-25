@@ -11,8 +11,8 @@ def build_local_model(
     input_shape=(
         LOCAL_HEIGHT,
         LOCAL_WIDTH,
-        1,
-    ),
+        1
+    )
 ):
     inputs = tf.keras.Input(
         shape=input_shape,
@@ -42,9 +42,7 @@ def build_local_model(
         name="restore_255_scale",
     )(x)
 
-    x = tf.keras.applications.resnet50.preprocess_input(
-        x
-    )
+    x = tf.keras.applications.resnet50.preprocess_input(x)
 
     base_model = (
         tf.keras.applications.ResNet50(
@@ -62,7 +60,7 @@ def build_local_model(
 
     x = base_model(
         x,
-        training=False,
+        training=False
     )
 
     x = tf.keras.layers.MaxPooling2D(
@@ -84,12 +82,12 @@ def build_local_model(
                 1e-5
             )
         ),
-        name="mammography_adapter",
+        name="mammography_adapter"
     )(x)
 
     x = tf.keras.layers.Dropout(
         0.5,
-        name="classification_dropout",
+        name="classification_dropout"
     )(x)
 
     output = tf.keras.layers.Dense(

@@ -50,13 +50,13 @@ ensure_directory(OUTPUT_PLOT)
 
 OPTIMAL_THRESHOLDS = load_json_data(PROJECT_ROOT / f"residual_threshold_seed_{SEED}.json", "selected_threshold")
 MODEL_TYPE = args.model
-BRANCH = ("fusion" if MODEL_TYPE in {"symmetric", "residual"} else MODEL_TYPE)
+BRANCH = "fusion" if MODEL_TYPE in {"symmetric", "residual"} else MODEL_TYPE
 EVALUATION_SCOPE = args.scope
 
-LOCAL_MODEL_PATH = (OUTPUT_MODEL / "local_resnet50_head.keras")
-GLOBAL_MODEL_PATH = (OUTPUT_MODEL / "global_resnet50_head.keras")
-SYMMETRIC_FUSION_MODEL_PATH = (OUTPUT_MODEL / f"model_fusion_symmetric_seed_{SEED}.keras")
-RESIDUAL_FUSION_MODEL_PATH = (OUTPUT_MODEL / f"model_fusion_residual_seed_{SEED}.keras")
+LOCAL_MODEL_PATH = OUTPUT_MODEL / "local_resnet50_head.keras"
+GLOBAL_MODEL_PATH = OUTPUT_MODEL / "global_resnet50_head.keras"
+SYMMETRIC_FUSION_MODEL_PATH = OUTPUT_MODEL / f"model_fusion_symmetric_seed_{SEED}.keras"
+RESIDUAL_FUSION_MODEL_PATH = OUTPUT_MODEL / f"model_fusion_residual_seed_{SEED}.keras"
 
 MODEL_PATHS = {
     "local": LOCAL_MODEL_PATH,

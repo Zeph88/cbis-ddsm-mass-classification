@@ -7,8 +7,7 @@ def validate_columns(dataframe, required_columns, dataframe_name):
 
     if missing_columns:
         raise ValueError(f"Missing columns in {dataframe_name}: {missing_columns}")
-
-
+        
 
 def build_global_lookup(global_dataframe, extra_columns=None, rename_columns=None):
 

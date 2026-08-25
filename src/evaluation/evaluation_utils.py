@@ -89,8 +89,9 @@ def collect_binary_predictions(model: tf.keras.Model, dataset: tf.data.Dataset, 
 
     return y_true, y_probability
 
-def plot_training_metric(history, metric_name, ylabel, title, output_path):
 
+def plot_training_metric(history, metric_name, ylabel, title, output_path):
+    
     train_key = metric_name
     validation_key = f"val_{metric_name}"
 

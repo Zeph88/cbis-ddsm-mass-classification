@@ -15,10 +15,7 @@ from src.functions import load_data, parse_arguments
 
 
 def clear_directory(directory_path: Union[str, Path]) -> list:
-    """
-    Irreversibly removes all files and folders inside the specified directory.
-    Returns a list with paths Python lacks permission to delete.
-    """
+
     directory_path = Path(directory_path)
     erroneous_paths = []
 
@@ -328,6 +325,15 @@ def preprocess_images(
     output_dir = OUTPUT_NPY / file_path
     output_dir_exists = os.path.exists(output_dir)
 
+    global_roi_dir = None
+
+    if zoom_to_roi:
+        global_roi_dir = OUTPUT_NPY / f"roi_global_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}"
+        if global_roi_dir.exists():
+            clear_directory(global_roi_dir)
+        else:
+            global_roi_dir.mkdir(parents=True, exist_ok=True)
+
     # If it exists, clean the folder. If not, create it.
     if output_dir_exists:
         clear_directory(output_dir)
@@ -341,11 +347,9 @@ def preprocess_images(
     # Filter records to those that have a 0 or 1 label
     df = df[df["keep"] == True].reset_index(drop=True)
 
-    # processed_rows retains all cases that can be used after the preprocessing was successfully performed
     processed_rows = []
-    # output_paths adds the location of the processed image and adds a column to processed_rows dataframe 
     output_paths = []
-
+    global_roi_paths = []
 
     # OUTPUT_NPY.mkdir(parents=True, exist_ok=True)
     # output_dir.mkdir(parents=True, exist_ok=True)
@@ -384,10 +388,7 @@ def preprocess_images(
         
         # Control the mask displays a ROI
         if np.count_nonzero(mask > 0) == 0:
-            print(
-                f"The mask contains no positive pixel at index={i}: "
-                f"mmg_path={mmg_path}, roi_path={roi_path}"
-            )
+            print(f"The mask contains no positive pixel at index={i}: mmg_path={mmg_path}, roi_path={roi_path}")
             skipped_shape_mismatch += 1
             continue
         
@@ -399,17 +400,21 @@ def preprocess_images(
                 output_size=resolution  
             )
             treated_image = treated_image[..., np.newaxis]
-        else:
-            
-            # Remove annotations from the mammogram
             breast_crop = remove_annotations(image)
-            
-            # Crop image to remove white borders and excessive padding, which could create noise
+            _, global_roi_mask = crop_breast_to_target_ratio(
+                breast_crop,
+                target_size=(GLOBAL_HEIGHT, GLOBAL_WIDTH),
+                threshold_ratio=0.01,
+                margin_ratio=0.03,
+                mask=mask
+            )
+        else:
+            breast_crop = remove_annotations(image)
             treated_image =  crop_breast_to_target_ratio(
                 breast_crop,
                 target_size=(resolution[0], resolution[1]),
                 threshold_ratio=0.01,
-                margin_ratio=0.03,
+                margin_ratio=0.03
             )
             
             
@@ -424,13 +429,21 @@ def preprocess_images(
             )
 
         output_path = output_dir / f"{row['source']}_{i:05d}.npy"
-
         np.save(output_path, treated_image.numpy().astype("float32"))
+
+        if zoom_to_roi:
+            global_roi_path = global_roi_dir / f"{row['sample_id']}.npy"
+            np.save(global_roi_path, global_roi_mask.numpy().astype("uint8"))
+            global_roi_paths.append(str(global_roi_path))
+
         processed_rows.append(row.to_dict())
         output_paths.append(str(output_path))
 
     processed_df = pd.DataFrame(processed_rows)
     processed_df["preprocessed_image_path"] = output_paths
+
+    if zoom_to_roi:
+        processed_df["global_roi_mask_path"] = global_roi_paths
 
     output_csv = OUTPUT_NPY / f"dataset_index_{file_path}.csv"
     processed_df.to_csv(output_csv, index=False)

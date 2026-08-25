@@ -1,19 +1,15 @@
 # https://keras.io/examples/vision/grad_cam/
 # Adaptation of code from Keras.io, author F. Chollet
 
-import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from src.functions import ensure_directory, parse_arguments, load_json_data
-from src.config import SEED, OUTPUT_NPY, OUTPUT_MODEL, OUTPUT_PLOT, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH, PROJECT_ROOT
+from src.functions import ensure_directory, parse_arguments
+from src.config import OUTPUT_NPY, OUTPUT_PLOT, LOCAL_HEIGHT, LOCAL_WIDTH, GLOBAL_HEIGHT, GLOBAL_WIDTH, PROJECT_ROOT
 from src.xAI_gradcam.gradcam_utils import build_resnet_feature_model, make_branch_gradcam_heatmap, get_layers_between, save_gradcam_figures
 
-os.environ["KERAS_BACKEND"] = "tensorflow"
-
-ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
-OPTIMAL_THRESHOLDS = load_json_data(PROJECT_ROOT / f"residual_threshold_seed_{SEED}.json", "selected_threshold")
+PREDICTION_THRESHOLD = 0.5
 
 args = parse_arguments(
     description=("Apply Grad-CAM to a local or global ResNet50 mammography model."),
@@ -37,12 +33,12 @@ args = parse_arguments(
 )
 
 if args.mode == "local":
-    image_type = (f"zoom_{LOCAL_HEIGHT}x{LOCAL_WIDTH}")
-    model_path = (OUTPUT_MODEL / "local_resnet50_head.keras")
+    image_type = f"zoom_{LOCAL_HEIGHT}x{LOCAL_WIDTH}"
+    model_path = OUTPUT_MODEL / "local_resnet50_head.keras"
 
 else:
-    image_type = (f"full_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}")
-    model_path = (OUTPUT_MODEL / "global_resnet50_head.keras")
+    image_type = f"full_{GLOBAL_HEIGHT}x{GLOBAL_WIDTH}"
+    model_path = OUTPUT_MODEL / "global_resnet50_head.keras"
 
 print(f"dataset_index_{image_type}.csv")
 
@@ -75,10 +71,6 @@ if array_npy.ndim != 3 or array_npy.shape[-1] != 1:
 array_npy = array_npy[np.newaxis, ...]
 
 model = tf.keras.models.load_model(model_path, compile=False)
-_ = model(array_npy, training=False)
-
-model.summary()
-
 
 # Build ResNet50 feature-map extractor
 feature_model, resnet_backbone = build_resnet_feature_model(model, f"{args.mode}_resnet50_feature_model")
@@ -94,7 +86,7 @@ head_layers = get_layers_between(model=model, start_layer=resnet_backbone, end_l
 # Calling the model directly avoids the extra predict pipeline.
 prob = float(model(array_npy, training=False).numpy()[0, 0])
 
-pred_label = int(prob >= OPTIMAL_THRESHOLDS)
+pred_label = int(prob >= PREDICTION_THRESHOLD)
 
 if args.target_class == "predicted":
     target_class = pred_label

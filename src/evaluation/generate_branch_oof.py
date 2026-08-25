@@ -186,7 +186,7 @@ def generate_fold_predictions(fold, local_index, global_index, overwrite=False):
     print("\nPredicting saved GLOBAL checkpoint...")
 
 
-    global_ds = (build_global_outer_dataset(outer_df))
+    global_ds = build_global_outer_dataset(outer_df)
     global_true, global_probability = collect_saved_model_predictions(model_path=global_model_path, dataset=global_ds)
 
 

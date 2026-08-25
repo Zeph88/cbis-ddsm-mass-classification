@@ -28,7 +28,7 @@ print(f"dataset_index_{file_path}.csv")
 df = pd.read_csv(OUTPUT_NPY / f"dataset_index_{file_path}.csv")
 
 train_ds, val_ds, test_ds = train_val_test_sets(
-    df, BATCH_SIZE, SEED
+    df, BATCH_SIZE, SEED, image_height=GLOBAL_HEIGHT, image_width=GLOBAL_WIDTH
 )
 
 for images, labels in train_ds.take(1):
@@ -85,6 +85,8 @@ eval_train_ds, eval_val_ds, test_ds_eval = train_val_test_sets(
     df,
     EVAL_BATCH_SIZE,
     SEED,
+    image_height=GLOBAL_HEIGHT, 
+    image_width=GLOBAL_WIDTH
 )
 
 del eval_train_ds

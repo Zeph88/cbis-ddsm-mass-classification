@@ -1,5 +1,4 @@
 import tensorflow as tf
-from src.evaluation.evaluation_utils import build_binary_metrics
 from src.config import THRESHOLDS
 
 def callbacks_for(checkpoint_path, log_path):
@@ -10,16 +9,12 @@ def callbacks_for(checkpoint_path, log_path):
             patience=6,
             restore_best_weights=False,
         ),
-
         tf.keras.callbacks.ModelCheckpoint(
-            filepath=str(
-                checkpoint_path
-            ),
+            filepath=str(checkpoint_path),
             monitor="val_loss",
             mode="min",
             save_best_only=True,
         ),
-
         tf.keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss",
             mode="min",
@@ -27,12 +22,7 @@ def callbacks_for(checkpoint_path, log_path):
             patience=3,
             min_lr=1e-6,
         ),
-
-        tf.keras.callbacks.CSVLogger(
-            filename=str(
-                log_path
-            ),
-        ),
+        tf.keras.callbacks.CSVLogger(filename=str(log_path))
     ]
 
 def build_binary_metrics(thresholds=THRESHOLDS):

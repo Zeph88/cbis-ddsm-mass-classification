@@ -47,9 +47,7 @@ model = build_local_model(
 
 compile_binary_model(model)
 
-head_checkpoint_path = (
-    OUTPUT_MODEL / f"local_resnet50_head.keras"
-)
+head_checkpoint_path = OUTPUT_MODEL / f"local_resnet50_head.keras"
 
 callbacks_head = callbacks_for(head_checkpoint_path, OUTPUT_MODEL / f"local_resnet50_head.csv")
 
