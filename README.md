@@ -69,7 +69,7 @@ For uncertainty estimation, paired model differences are evaluated using a **pat
 
 ## Reported results
 
-The values below reproduce the results reported in the accompanying `draft_report.pdf`. Small numerical differences may occur when neural-network training is repeated, even with fixed random seeds.
+The values below reproduce the results reported in the accompanying `report.pdf`. Small numerical differences may occur when neural-network training is repeated, even with fixed random seeds.
 
 ### Five-fold patient-grouped cross-validation
 
@@ -145,11 +145,11 @@ Expected calibration error (ECE) calculated from pooled OOF predictions:
 
 ECE is interpreted descriptively because it depends on the calibration-bin definition.
 
-### Operating threshold reported in the draft
+### Operating threshold mentioned in the report
 
 The retained residual-fusion operating threshold was selected from **validation predictions only**, with a predefined target of at least **85% sensitivity**.
 
-The threshold reported in the draft was:
+The threshold reported was:
 
 ```text
 Selected threshold: 0.265
@@ -304,6 +304,18 @@ The global lookup is constrained so that a mammogram key maps to a single full-m
 │   ├── metadata/
 │   ├── processed/
 │   └── train_val_test_splits/
+├── results/
+│   ├── result_fusion_residual /
+│   ├── result_global_branch /
+│   ├── result_local_branch /
+│   └── fusion_cv_5fold_seed_42/
+│       ├── folds/
+│       └── results/
+├── fusion_paired_test_predictions_seed_42.csv
+├── residual_threshold_grid_seed_42.csv
+├── results_local_branch/
+├── results_global_branch/
+└── results_fusion_residual/
 ├── src/
 │   ├── data/
 │   │   ├── build_dataset.py
@@ -339,7 +351,7 @@ The global lookup is constrained so that a mammogram key maps to a single full-m
 │   │   └── gradcam_utils.py
 │   ├── config.py
 │   └── functions.py
-├── draft_report.pdf
+├── report.pdf
 ├── residual_threshold_seed_42.json
 ├── requirements.txt
 └── README.md
@@ -610,11 +622,19 @@ N_BOOTSTRAP = 10000
 
 The repository version-controls:
 
-- the original metadata;
-- the resolved dataset index;
-- the fixed patient-grouped train/validation/test splits;
+- the original metadata and resolved dataset index;
+- the fixed patient-grouped train, validation and test splits;
+- out-of-fold predictions from the five-fold patient-grouped cross-validation;
+- fold-level and pooled cross-validation metrics;
+- paired patient-level bootstrap results and 95% confidence intervals;
+- calibration-bin data derived from the pooled OOF predictions;
+- the validation threshold grid and retained operating threshold;
+- held-out test-set probabilities for the final residual model;
+- training histories for the retained single-branch and residual-fusion configurations.
 - the source code;
 - the reported residual operating-threshold JSON.
+
+These machine-readable artefacts are stored under results/. They allow the main quantitative results reported in the accompanying report to be inspected and, where applicable, recalculated without retraining the neural networks.
 
 The following are intentionally external or generated:
 
@@ -650,7 +670,7 @@ Important limitations include:
 - Grad-CAM localisation is not a direct measure of clinical validity;
 - results should not be interpreted as evidence of real-world clinical performance.
 
-See `draft_report.pdf` for the full methodology, literature review, development experiments, statistical analysis and discussion.
+See `report.pdf` for the full methodology, literature review, development experiments, statistical analysis and discussion.
 
 ---
 
