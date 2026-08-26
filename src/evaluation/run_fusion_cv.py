@@ -12,7 +12,7 @@ from src.modeling.local_resnet50 import build_local_model
 from src.modeling.global_resnet50 import build_global_model
 from src.modeling.fusion import build_residual_fusion, build_symmetric_fusion
 from src.functions import ensure_directory, set_seed, load_data, parse_arguments
-from src.training.dataset_preparation import build_tf_dataset
+from src.training.dataset_preparation import build_tf_dataset, train_val_test_sets
 from src.training.training_utils import callbacks_for, compile_binary_model
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, load_preprocessed_indexes
 from src.data.pairing import pair_local_global
@@ -205,6 +205,9 @@ def train_fusion(architecture, local_model_path, global_model_path, train_ds, va
 
 def evaluate_fusion(model_path, outer_eval_ds, outer_metadata):
 
+    tf.keras.backend.clear_session()
+    gc.collect()
+
     model = tf.keras.models.load_model(model_path, compile=False)
     y_true, probabilities = collect_binary_predictions(model, outer_eval_ds)
     scores = calculate_metrics(y_true, probabilities)
@@ -252,7 +255,10 @@ def run_one_fold(outer_fold, dev_meta, patient_to_outer_fold, local_dev, global_
 
     # FUSION DATASET
     paired = build_paired_dataframe(local_fold, global_fold)
-    fusion_train_ds, fusion_val_ds, outer_ds, outer_metadata = build_paired_datasets(paired)
+
+    EVAL_BATCH_SIZE = 2
+
+    outer_metadata = (paired[paired["cv_set"] == "outer_evaluation"].copy().reset_index(drop=True))
 
     predictions_df = outer_metadata[
         [
@@ -260,7 +266,7 @@ def run_one_fold(outer_fold, dev_meta, patient_to_outer_fold, local_dev, global_
             "patient_id",
             "left or right breast",
             "image view",
-            "label"
+            "label",
         ]
     ].copy()
 
@@ -269,10 +275,40 @@ def run_one_fold(outer_fold, dev_meta, patient_to_outer_fold, local_dev, global_
 
     metric_rows = []
 
+
     # SYMMETRIC + RESIDUAL
     for architecture in ["symmetric", "residual"]:
+
         fusion_path = fold_dir / f"{architecture}.keras"
 
+        # TRAIN DATASETS
+        fusion_train_ds = build_tf_dataset(
+            paired[paired["cv_set"] == "train"],
+            batch_size=BATCH_SIZE,
+            shuffle=True,
+            seed=SEED,
+            path_image="local_path",
+            added_path_image="global_path",
+            image_height=LOCAL_HEIGHT,
+            image_width=LOCAL_WIDTH,
+            added_image_height=GLOBAL_HEIGHT,
+            added_image_width=GLOBAL_WIDTH,
+        )
+
+        fusion_val_ds = build_tf_dataset(
+            paired[paired["cv_set"] == "validation"],
+            batch_size=BATCH_SIZE,
+            shuffle=False,
+            seed=SEED,
+            path_image="local_path",
+            added_path_image="global_path",
+            image_height=LOCAL_HEIGHT,
+            image_width=LOCAL_WIDTH,
+            added_image_height=GLOBAL_HEIGHT,
+            added_image_width=GLOBAL_WIDTH,
+        )
+
+        # TRAIN
         train_fusion(
             architecture,
             local_path,
@@ -284,7 +320,32 @@ def run_one_fold(outer_fold, dev_meta, patient_to_outer_fold, local_dev, global_
             force=force,
         )
 
-        probabilities, scores = evaluate_fusion(fusion_path, outer_ds, outer_metadata)
+        del fusion_train_ds
+        del fusion_val_ds
+
+        tf.keras.backend.clear_session()
+        gc.collect()
+
+        # OUTER EVALUATION DATASET
+        outer_ds = build_tf_dataset(
+            outer_metadata,
+            batch_size=EVAL_BATCH_SIZE,
+            shuffle=False,
+            seed=SEED,
+            path_image="local_path",
+            added_path_image="global_path",
+            image_height=LOCAL_HEIGHT,
+            image_width=LOCAL_WIDTH,
+            added_image_height=GLOBAL_HEIGHT,
+            added_image_width=GLOBAL_WIDTH,
+        )
+
+        # EVALUATE
+        probabilities, scores = evaluate_fusion(
+            fusion_path,
+            outer_ds,
+            outer_metadata,
+        )
 
         predictions_df[f"{architecture}_probability"] = probabilities
 
@@ -295,14 +356,27 @@ def run_one_fold(outer_fold, dev_meta, patient_to_outer_fold, local_dev, global_
                 "architecture": architecture,
                 "n_outer_evaluation": len(outer_metadata),
                 "n_outer_evaluation_patients": outer_metadata["patient_id"].nunique(),
-                **scores
+                **scores,
             }
         )
 
         print(architecture, scores)
 
-    predictions_df.to_csv(fold_dir / "oof_predictions.csv", index=False)
-    pd.DataFrame(metric_rows).to_csv(fold_dir / "fold_metrics.csv", index=False)
+        del outer_ds
+
+        tf.keras.backend.clear_session()
+        gc.collect()
+
+
+    predictions_df.to_csv(
+        fold_dir / "oof_predictions.csv",
+        index=False,
+    )
+
+    pd.DataFrame(metric_rows).to_csv(
+        fold_dir / "fold_metrics.csv",
+        index=False,
+    )
 
 
 def main():

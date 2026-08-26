@@ -9,7 +9,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from sklearn.metrics import average_precision_score, confusion_matrix, ConfusionMatrixDisplay, log_loss, roc_auc_score
 
-from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, THRESHOLDS, PROJECT_ROOT
+from src.config import OUTPUT_MODEL, OUTPUT_NPY, OUTPUT_PLOT, SEED, MAMMOGRAM_KEY, THRESHOLDS, PROJECT_ROOT, GLOBAL_HEIGHT, GLOBAL_WIDTH, LOCAL_HEIGHT, LOCAL_WIDTH
 from src.data.pairing import pair_local_global, validate_columns
 from src.functions import set_seed, ensure_directory, parse_arguments, load_json_data
 from src.evaluation.evaluation_utils import calculate_metrics, collect_binary_predictions, validate_model_path
@@ -48,8 +48,13 @@ args = parse_arguments(
 ensure_directory(OUTPUT_MODEL)
 ensure_directory(OUTPUT_PLOT)
 
-OPTIMAL_THRESHOLDS = load_json_data(PROJECT_ROOT / f"residual_threshold_seed_{SEED}.json", "selected_threshold")
 MODEL_TYPE = args.model
+
+if MODEL_TYPE == "residual":
+    retained_threshold = load_json_data(PROJECT_ROOT / f"residual_threshold_seed_{SEED}.json", "selected_threshold")
+else:
+    retained_threshold = 0.5
+
 BRANCH = "fusion" if MODEL_TYPE in {"symmetric", "residual"} else MODEL_TYPE
 EVALUATION_SCOPE = args.scope
 
@@ -66,7 +71,7 @@ MODEL_PATHS = {
 }
 
 model_path = MODEL_PATHS[MODEL_TYPE]
-ALL_THRESHOLDS = THRESHOLDS + [OPTIMAL_THRESHOLDS]
+ALL_THRESHOLDS = THRESHOLDS + [retained_threshold]
 
 EVALUATION_BATCH_SIZE = 1
 
@@ -98,7 +103,7 @@ if BRANCH == "fusion" and EVALUATION_SCOPE != "paired":
     raise ValueError("The fusion model requires EVALUATION_SCOPE='paired'.")
 
 if BRANCH == "global" and EVALUATION_SCOPE == "paired":
-    print("\nWARNING: The global branch will be evaluated against local lesion labels. This measures its relevance to lesion classification, not its noriginal mammogram-level performance.")
+    print("WARNING: The global branch will be evaluated against local lesion labels. This measures its relevance to lesion classification")
 
 # Initial cleanup
 tf.keras.backend.clear_session()
@@ -115,20 +120,6 @@ def validate_single_input_shape(input_shape, model_name):
         raise ValueError(f"Unexpected {model_name} input shape: {input_shape}")
 
     return tuple(input_shape)
-
-
-def inspect_single_model_input_shape(model_path):
-
-    validate_model_path(model_path)
-    temporary_model = tf.keras.models.load_model(model_path, compile=False)
-    input_shape = validate_single_input_shape(temporary_model.input_shape, model_path.name)
-
-    del temporary_model
-
-    tf.keras.backend.clear_session()
-    gc.collect()
-
-    return input_shape
 
 
 def get_image_dimensions(input_shape):
@@ -150,7 +141,7 @@ if BRANCH == "fusion":
 
 elif BRANCH == "local":
     if EVALUATION_SCOPE == "paired":
-        global_input_shape = inspect_single_model_input_shape(GLOBAL_MODEL_PATH)
+        global_input_shape = (None, GLOBAL_HEIGHT, GLOBAL_WIDTH, 1)
 
     model = tf.keras.models.load_model(model_path, compile=False)
     local_input_shape = validate_single_input_shape(model.input_shape, "local model")
@@ -158,7 +149,7 @@ elif BRANCH == "local":
 
 elif BRANCH == "global":
     if EVALUATION_SCOPE == "paired":
-        local_input_shape = inspect_single_model_input_shape(LOCAL_MODEL_PATH)
+        local_input_shape = (None, LOCAL_HEIGHT, LOCAL_WIDTH, 1)
 
     model = tf.keras.models.load_model(model_path, compile=False)
     global_input_shape = validate_single_input_shape(model.input_shape, "global model")
@@ -183,7 +174,6 @@ def load_index(input_shape, zoom_to_roi):
 def build_paired_dataframe(local_dataframe, global_dataframe):
 
     validate_columns(local_dataframe, ["label"], "local dataframe")
-    initial_local_count = len(local_dataframe)
     paired_dataframe = pair_local_global(local_dataframe, global_dataframe)
 
     return paired_dataframe
@@ -305,13 +295,13 @@ for threshold in ALL_THRESHOLDS:
     )
 
 # Confusion matrix at the retained threshold
-y_pred_retained = (y_prob >= OPTIMAL_THRESHOLDS).astype(np.int32)
+y_pred_retained = (y_prob >= retained_threshold).astype(np.int32)
 cm = confusion_matrix(y_true, y_pred_retained, labels=[0, 1])
 display = ConfusionMatrixDisplay(cm, display_labels=["Benign", "Malignant"])
 
 fig, ax = plt.subplots(figsize=(5, 5))
 display.plot(ax=ax, values_format="d", colorbar=False)
-ax.set_title(f"Confusion Matrix - Test Set Threshold = {OPTIMAL_THRESHOLDS:.3f}")
+ax.set_title(f"Confusion Matrix - Test Set Threshold = {retained_threshold:.3f}")
 fig.tight_layout()
 
 confusion_matrix_path = (OUTPUT_PLOT / f"confusion_matrix_{BRANCH}_{EVALUATION_SCOPE}_seed_{SEED}.png")
