@@ -187,6 +187,9 @@ local_index_path = OUTPUT_NPY / f"dataset_index_zoom_{local_height}x{local_width
 global_index_path = OUTPUT_NPY / f"dataset_index_full_{global_height}x{global_width}.csv"
 paired_df = build_paired_test_dataframe(local_index_path=local_index_path, global_index_path=global_index_path)
 
+print("Rows:", len(paired_df))
+print(paired_df.iloc[SAMPLE_INDEX][["local_path", "global_path", "label"]])
+
 if SAMPLE_INDEX < 0 or SAMPLE_INDEX >= len(paired_df):
     raise IndexError(f"SAMPLE_INDEX={SAMPLE_INDEX} is outside the valid range 0 to {len(paired_df) - 1}.")
 
