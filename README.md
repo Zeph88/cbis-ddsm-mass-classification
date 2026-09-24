@@ -372,6 +372,54 @@ Generated NumPy arrays, intermediate model checkpoints and plots are not intende
 
 ---
 
+## Clone the repository
+
+```bash
+git clone https://github.com/Zeph88/cbis-ddsm-mass-classification.git
+cd cbis-ddsm-mass-classification
+```
+
+## Trained model
+
+The retained trained models required for saved-model evaluation are available separately as GitHub Release assets because of their file size.
+
+Download the model from:
+
+https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest
+
+Intermediate training checkpoints are not version-controlled.
+
+After downloading the release asset, place it at:
+
+```text
+src/models/global_resnet50_head.keras
+src/models/local_resnet50_head.keras
+src/models/model_fusion_residual_seed_42.keras
+src/models/model_fusion_symmetric_seed_42.keras
+```
+
+Using the following command for folder creation:
+
+```bash
+mkdir -p src/models
+```
+
+Then, fetch the trained models with the following lines of command.
+
+```bash
+wget -P src/models \
+https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/global_resnet50_head.keras
+
+wget -P src/models \
+  https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/local_resnet50_head.keras
+
+wget -P src/models \
+  https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/model_fusion_residual_seed_42.keras
+
+wget -P src/models \
+  https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/model_fusion_symmetric_seed_42.keras
+```
+
 ## Installation
 
 Create and activate a virtual environment:
@@ -658,48 +706,6 @@ The retained models are available separately as GitHub Release assets.
 Deep-learning training can exhibit small run-to-run numerical variation depending on the TensorFlow execution environment. For this reason, the final architectural conclusions rely primarily on patient-grouped cross-validation, matched OOF predictions and paired patient-cluster bootstrap analysis rather than on a single training run.
 
 ---
-
-## Trained model
-
-The retained trained models required for saved-model evaluation are available separately as GitHub Release assets because of their file size.
-
-Download the model from:
-
-https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest
-
-Intermediate training checkpoints are not version-controlled.
-
-After downloading the release asset, place it at:
-
-```text
-src/models/global_resnet50_head.keras
-src/models/local_resnet50_head.keras
-src/models/model_fusion_residual_seed_42.keras
-src/models/model_fusion_symmetric_seed_42.keras
-```
-
-Using the following command for folder creation:
-
-```bash
-mkdir -p src/models
-```
-
-Then, fetch the trained models with the following lines of command.
-
-```bash
-wget -P src/models \
-https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/global_resnet50_head.keras
-
-wget -P src/models \
-  https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/local_resnet50_head.keras
-
-wget -P src/models \
-  https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/model_fusion_residual_seed_42.keras
-
-wget -P src/models \
-  https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/model_fusion_symmetric_seed_42.keras
-
-```
 
 ## Main interpretation
 
