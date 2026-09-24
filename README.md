@@ -357,7 +357,7 @@ The global lookup is constrained so that a mammogram key maps to a single full-m
 └── README.md
 ```
 
-Generated NumPy arrays, intermediate model checkpoints and plots are not intended to be version-controlled. The final retained residual-fusion model is distributed separately through GitHub Releases.
+Generated NumPy arrays, intermediate model checkpoints and plots are not intended to be version-controlled. The retained trained models are distributed separately through GitHub Releases.
 
 ---
 
