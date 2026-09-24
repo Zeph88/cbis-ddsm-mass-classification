@@ -34,7 +34,18 @@ The task is **computer-aided diagnosis (CADx)** rather than lesion detection. Th
 - `0`: benign / benign without callback;
 - `1`: malignant.
 
-Raw DICOM files are **not included in the repository** and must be obtained separately.
+Raw DICOM files are not included in this repository.
+
+The CBIS-DDSM dataset can be obtained from The Cancer Imaging Archive (TCIA):
+
+https://www.cancerimagingarchive.net/collection/cbis-ddsm/
+
+This project uses CBIS-DDSM Version 1 (updated 2017-09-14).
+
+Dataset DOI:
+10.7937/K9/TCIA.2016.7O02S9CY
+
+License: CC BY 3.0.
 
 The original metadata used by the project are version-controlled under:
 
