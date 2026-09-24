@@ -650,7 +650,7 @@ Deep-learning training can exhibit small run-to-run numerical variation dependin
 
 ## Trained model
 
-The final trained residual-fusion model used for the held-out test evaluation is available separately as a GitHub Release asset because of its file size.
+The retained trained models required for saved-model evaluation are available separately as GitHub Release assets because of their file size.
 
 Download the model from:
 
