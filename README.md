@@ -684,6 +684,23 @@ Using the following command for folder creation:
 mkdir -p src/models
 ```
 
+Then, fetch the trained models with the following lines of command.
+
+```bash
+wget -P src/models \
+https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/global_resnet50_head.keras
+
+wget -P src/models \
+  https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/local_resnet50_head.keras
+
+wget -P src/models \
+  https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/model_fusion_residual_seed_42.keras
+
+wget -P src/models \
+  https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest/download/model_fusion_symmetric_seed_42.keras
+
+```
+
 ## Main interpretation
 
 The final experiments support three main observations:
