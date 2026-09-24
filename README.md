@@ -305,9 +305,9 @@ The global lookup is constrained so that a mammogram key maps to a single full-m
 │   ├── processed/
 │   └── train_val_test_splits/
 ├── results/
-│   ├── result_fusion_residual /
-│   ├── result_global_branch /
-│   ├── result_local_branch /
+│   ├── results_fusion_residual /
+│   ├── results_global_branch /
+│   ├── results_local_branch /
 │   └── fusion_cv_5fold_seed_42/
 │       ├── folds/
 │       └── results/
