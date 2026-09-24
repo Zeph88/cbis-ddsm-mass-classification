@@ -357,7 +357,7 @@ The global lookup is constrained so that a mammogram key maps to a single full-m
 └── README.md
 ```
 
-Generated NumPy arrays, model checkpoints and plots are not intended to be version-controlled.
+Generated NumPy arrays, intermediate model checkpoints and plots are not intended to be version-controlled. The final retained residual-fusion model is distributed separately through GitHub Releases.
 
 ---
 
@@ -640,12 +640,24 @@ The following are intentionally external or generated:
 
 - raw CBIS-DDSM DICOM files;
 - preprocessed `.npy` arrays;
-- trained model checkpoints;
 - generated plots.
+
+The retained models are available separately as GitHub Release assets.
 
 Deep-learning training can exhibit small run-to-run numerical variation depending on the TensorFlow execution environment. For this reason, the final architectural conclusions rely primarily on patient-grouped cross-validation, matched OOF predictions and paired patient-cluster bootstrap analysis rather than on a single training run.
 
 ---
+
+## Trained model
+
+The final trained residual-fusion model used for the held-out test evaluation
+is available separately as a GitHub Release asset because of its file size.
+
+Download the model from:
+
+https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest
+
+Intermediate training checkpoints are not version-controlled.
 
 ## Main interpretation
 
