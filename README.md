@@ -650,14 +650,28 @@ Deep-learning training can exhibit small run-to-run numerical variation dependin
 
 ## Trained model
 
-The final trained residual-fusion model used for the held-out test evaluation
-is available separately as a GitHub Release asset because of its file size.
+The final trained residual-fusion model used for the held-out test evaluation is available separately as a GitHub Release asset because of its file size.
 
 Download the model from:
 
 https://github.com/Zeph88/cbis-ddsm-mass-classification/releases/latest
 
 Intermediate training checkpoints are not version-controlled.
+
+After downloading the release asset, place it at:
+
+```text
+src/models/global_resnet50_head.keras
+src/models/local_resnet50_head.keras
+src/models/model_fusion_residual_seed_42.keras
+src/models/model_fusion_symmetric_seed_42.keras
+```
+
+Using the following command for folder creation:
+
+```bash
+mkdir -p src/models
+```
 
 ## Main interpretation
 
